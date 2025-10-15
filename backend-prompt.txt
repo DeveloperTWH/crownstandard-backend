@@ -1,0 +1,109 @@
+#🧠 Master Prompt — Crownstandard Project Overview (Backend Phase)
+
+You are working on a full-stack platform called Crownstandard — a cleaning-services marketplace similar to *Urban Company*, but specialized only in cleaning services.
+
+---
+
+📱 Project Overview
+
+Crownstandard is a multi-role platform with three types of users:
+
+* 👤 Customer: Browses services, books cleaning jobs, uploads place photos, pays online, tips providers, leaves reviews, and raises disputes if necessary.
+* 🧑‍🔧 Service Provider: Registers and lists cleaning services (auto-linked to their location), gets bookings, performs jobs, earns payouts (after a 48-hour dispute window), and manages availability.
+* 🧑‍💼 Admin: Approves providers, monitors disputes, issues refunds, controls payouts, manages visibility of services and reviews, and can broadcast notifications.
+
+The platform supports web + mobile apps (Next.js frontend, Node.js backend, MongoDB database), with Stripe handling payments, tips, refunds, and payouts.
+
+---
+
+🛠️ Current System Features
+
+#✅ Core Capabilities
+
+* 🔐 Auth: Email/password + OAuth (Google/Apple) login, forget password flow.
+* 👥 Unified User System: One User model for customers, providers, and admins with role-based profiles and KYC/payout info.
+* 🧹 Service Listings: Providers can create, update, and manage cleaning services with pricing, media, and category classification.
+* 📍 Location Aware: Services are auto-linked to provider’s location for search and discovery.
+* 📅 Booking System: Customers can book services, upload photos, receive OTP for completion, and view all booking statuses.
+* 💳 Payments: Stripe integration with 25% platform fee + 75% provider payout, tip support, and payout hold/release logic.
+* 🪙 Tips: Independent tip transactions with separate refunds and dispute handling.
+* 📝 Reviews: Customers can leave ratings, comments, and photos once a booking is completed.
+* ⚖️ Disputes: Full dispute lifecycle with evidence, refunds (full/partial), and admin decisions.
+* 🔔 Notifications: In-app + push notifications for all major events (bookings, payments, disputes, chat).
+* 🧾 Audit Logs: Records every admin/system action for traceability and compliance.
+* 📧 Forgot Password: Complete flow implemented and linked to role-based dashboards.
+* 🗺️ Dashboards: Login redirects to respective dashboards (Customer → Customer dashboard, Provider → Provider dashboard).
+
+---
+
+📦 Data Layer Status ✅ (Completed)
+
+We have fully designed and implemented all MongoDB models:
+
+1. User – with role, KYC, payout info, earnings, blocked dates, ratings, and profile fields.
+2. ServiceCategory – to organize services.
+3. Service – provider-listed services with admin visibility controls and currency support.
+4. Booking – complete booking lifecycle, OTP verification, cancellation rules, pricing snapshots, and tip summaries.
+5. PaymentTransaction – main payment record with payout tracking, refund data, and hold logic.
+6. TipTransaction – independent tip tracking with payout/refund capabilities.
+7. Review – customer reviews with visibility controls and rating aggregation.
+8. Dispute – complaint resolution model with evidence, decisions, and refund details.
+9. Notification – all in-app and push notifications stored and tracked.
+10. AuditLog – complete admin action history for compliance and debugging.
+
+✅ All models are finalized and production-ready.
+✅ Relationships and ERD are documented.
+✅ Stripe-compatible payment & payout logic is built into the schema.
+
+---
+
+📍 Current Status (As of Now)
+
+* ✅ Schema Layer: Fully completed for all backend collections.
+* ✅ Relationships & data flows: Finalized and documented.
+* ✅ Auth, password reset, and dashboard linking: Implemented.
+* 🧭 We are currently at the start of the API layer.
+
+---
+
+🚀 Next Step (Where to Start Now)
+
+We are ready to begin API development. The recommended order:
+
+1. Auth APIs – signup, login, OAuth, forget/reset password.
+2. User APIs – profile retrieval/update, provider onboarding.
+3. Service APIs – CRUD for services and categories.
+4. Booking APIs – create, update, cancel, complete, OTP verify.
+5. Payment APIs – create PaymentIntent, confirm, webhook handling.
+6. Tip APIs – create tip, refund, webhook handling.
+7. Review APIs – create, list, hide/unhide.
+8. Dispute APIs – raise, manage, resolve disputes.
+9. Notification APIs – fetch and mark as read.
+10. Admin APIs – payout management, analytics, audit queries.
+
+---
+
+📊 Business Logic Notes
+
+* 💸 Payment Split: Platform takes 25%, provider gets 75%, tips are 100% to provider.
+* ⏱️ Dispute Window: 48 hours hold before payout is released.
+* ❌ Cancellation Policy: Free before provider accepts; 15% fee after acceptance.
+* 📍 Location: Auto-picked from provider’s profile, searchable by service area.
+* 📸 Photo Uploads: Customer uploads required for booking.
+* 🔄 Refunds: Full or partial via Stripe; both booking and tip refundable.
+* 🧑‍⚖️ Disputes: Raised within 48h post-completion, resolved only by admin.
+
+---
+
+🧩 Final Notes
+
+* Backend uses Node.js + Express + MongoDB (Mongoose).
+* Stripe Connect is used for payouts, fees, and tip handling.
+* All models are modular and future-proofed for features like coupons, subscriptions, and promotions.
+* Project name: Crownstandard.
+
+---
+
+Goal: Use the above context to continue backend development from the API layer starting with authentication and user management. All database models are complete — focus on implementing routes, controllers, middleware, and integrating them with Stripe and front-end components.
+
+

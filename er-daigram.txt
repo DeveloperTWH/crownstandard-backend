@@ -1,0 +1,262 @@
+---
+
+🏗️ CROWNSTANDARD — COMPLETE BACKEND MODEL ARCHITECTURE
+
+---
+
+ 1. 👤 User
+
+Purpose: Stores all platform users (Admin, Provider, Customer) in a single collection.
+
+Key Fields:
+
+* name, email, phone, passwordHash
+* role (admin | provider | customer)
+* status, gender, DOB
+* OAuth providers
+* providerProfile: approvalStatus, payout info, KYC, earnings, blockedDates, avgRating
+* customerProfile: defaultAddress, savedAddresses
+
+Relationships:
+
+* 🔗 Referenced in almost every other model
+* Service.providerId → User._id
+* Booking.customerId / Booking.providerId → User._id
+* Review.customerId / Review.providerId → User._id
+* PaymentTransaction.customerId / providerId → User._id
+
+---
+
+ 2. 🏷️ ServiceCategory
+
+Purpose: Categorizes cleaning services (e.g., Home, Office, Carpet, etc.)
+
+Key Fields:
+
+* name, slug, description, active
+
+Relationships:
+
+* Service.categoryId → ServiceCategory._id
+* Booking.categoryId → ServiceCategory._id
+
+---
+
+ 3. 🧹 Service
+
+Purpose: Represents a cleaning service listed by a provider.
+
+Key Fields:
+
+* providerId (User)
+* categoryId (ServiceCategory)
+* title, description
+* basePrice, currency, priceUnit, minHours
+* includes, exclusions
+* media (S3 URLs)
+* isActive (provider), isVisible (admin)
+* ratingSummary
+
+Relationships:
+
+* Booking.serviceId → Service._id
+* Review.serviceId → Service._id
+
+---
+
+ 4. 📅 Booking
+
+Purpose: Core transaction unit — links customer, provider, service, and payment.
+
+Key Fields:
+
+* customerId, providerId, serviceId, categoryId
+* status (pending_payment, accepted, completed, etc.)
+* scheduledAt, durationHours
+* photos (S3 URLs + metadata)
+* serviceAddress (snapshot)
+* pricingSnapshot (with currency)
+* cancellationPolicySnapshot
+* payment, payout details
+* tipSummary (with currency)
+* completionOtp (verification)
+* lifecycle timestamps (acceptedAt, completedAt, etc.)
+
+Relationships:
+
+* Booking.customerId → User._id
+* Booking.providerId → User._id
+* Booking.serviceId → Service._id
+* PaymentTransaction.bookingId → Booking._id
+* TipTransaction.bookingId → Booking._id
+* Review.bookingId → Booking._id
+* Dispute.bookingId → Booking._id
+* Notification.bookingId → Booking._id
+
+---
+
+ 5. 💳 PaymentTransaction
+
+Purpose: Stores actual payment event for a booking.
+
+Key Fields:
+
+* bookingId, customerId, providerId
+* paymentIntentId, chargeId, transferId
+* amount, currency, applicationFee, transferAmount
+* status, refundedAmount, refundedAt
+* payoutStatus, payoutReleasedAt, holdReason
+* metadata
+
+Relationships:
+
+* PaymentTransaction.bookingId → Booking._id
+* Dispute.paymentTransactionId → PaymentTransaction._id
+* AuditLog.targetId → PaymentTransaction._id
+
+---
+
+ 6. 💲 TipTransaction
+
+Purpose: Handles tip payment (separate Stripe PaymentIntent).
+
+Key Fields:
+
+* bookingId, customerId, providerId
+* paymentIntentId, chargeId
+* amount, currency
+* status, refundedAmount, refundedAt
+* payoutStatus, payoutReleasedAt, holdReason
+
+Relationships:
+
+* TipTransaction.bookingId → Booking._id
+* Dispute.tipTransactionId → TipTransaction._id
+
+---
+
+ 7. ⭐ Review
+
+Purpose: Customer feedback on a service.
+
+Key Fields:
+
+* bookingId, serviceId, providerId, customerId
+* rating, title, comment, photos
+* isVisible
+
+Relationships:
+
+* Review.bookingId → Booking._id
+* Review.serviceId → Service._id
+* Review.providerId → User._id
+
+---
+
+ 8. ⚖️ Dispute
+
+Purpose: Tracks complaints, holds, refunds, and resolution outcomes.
+
+Key Fields:
+
+* bookingId, customerId, providerId
+* paymentTransactionId, tipTransactionId
+* reason, description
+* evidence[] (photo/text/chat)
+* status (open, under_review, resolved, etc.)
+* decision (outcome, refundAmount, notes)
+* resolvedBy, resolvedAt
+
+Relationships:
+
+* Dispute.bookingId → Booking._id
+* Dispute.paymentTransactionId → PaymentTransaction._id
+* Dispute.tipTransactionId → TipTransaction._id
+* AuditLog.targetId → Dispute._id
+
+---
+
+ 9. 🔔 Notification
+
+Purpose: In-app & push notifications for all user actions.
+
+Key Fields:
+
+* userId, bookingId
+* type (booking, payment, dispute, etc.)
+* title, message, actionUrl
+* isRead, isPushed
+* meta (extra data)
+
+Relationships:
+
+* Notification.userId → User._id
+* Notification.bookingId → Booking._id
+
+---
+
+ 10. 🧾 AuditLog
+
+Purpose: Records all critical admin/system actions for transparency & compliance.
+
+Key Fields:
+
+* performedBy (admin)
+* actionType (REFUND_ISSUED, PAYOUT_HELD, etc.)
+* targetType, targetId
+* description, before, after, meta, ipAddress
+
+Relationships:
+
+* AuditLog.performedBy → User._id
+* AuditLog.targetId → any resource (Booking, PaymentTransaction, Dispute, etc.)
+
+---
+
+🔗 ERD-STYLE RELATIONSHIP SUMMARY
+
+
+User ───────< Service
+User ───────< Booking >────── ServiceCategory
+User ───────< Booking >────── Service
+Booking ────< PaymentTransaction
+Booking ────< TipTransaction
+Booking ────< Review
+Booking ────< Dispute
+Booking ────< Notification
+PaymentTransaction ────< Dispute
+TipTransaction ────────< Dispute
+Dispute ───────────────< AuditLog
+PaymentTransaction ────< AuditLog
+Booking ───────────────< AuditLog
+
+
+Legend:
+
+* ───< = one-to-many (e.g., one user can have many bookings)
+
+---
+
+📊 How Data Flows Through the System
+
+1. User creates a Booking → stores pricingSnapshot, photos, and OTP.
+2. Booking payment creates a PaymentTransaction.
+3. Optional tip creates a TipTransaction.
+4. Booking completion allows Review creation.
+5. If a problem arises, a Dispute is created → linked to payment/tip.
+6. Notifications fire at each stage via Notification.
+7. Admin actions (refund, hold, resolve) logged in AuditLog.
+
+---
+
+✅ Result:
+We now have a fully normalized, production-ready MongoDB schema architecture that:
+
+* Covers every critical business flow.
+* Scales to thousands of users and bookings.
+* Supports future features like subscriptions, promotions, and analytics.
+* Is Stripe-ready, dispute-ready, and admin-dashboard-ready.
+
+---
+
+Would you like me to now move on to the API design phase (starting with auth, service, booking, etc.)? – This is the logical next step after schema design.

@@ -1,0 +1,132 @@
+You are my senior backend engineer and full-stack technical partner.  
+We are building a product called **Crownstandard** — a full-scale, UrbanClap-style cleaning-services marketplace.  
+Your job is to understand the entire project context below and then continue development **exactly from where we left off: designing the PaymentTransaction model.**
+
+---
+
+🚀 PROJECT OVERVIEW — Crownstandard
+
+Crownstandard is a web and mobile platform connecting **customers** and **cleaning service providers**.  
+It supports **in-app payments, bookings, OTP-verified service completion, dispute resolution, tips, payouts, and admin controls.**
+
+There are **3 user roles**:
+1. **Admin** – manages platform, can hide services, hold payouts, resolve disputes, view analytics.
+2. **Service Provider** – lists cleaning services, receives bookings, performs jobs, gets payouts.
+3. **Customer** – searches services, uploads photos, books services, pays, reviews, and tips providers.
+
+All users are stored in a **single `User` model** with a `role` field (`admin`, `provider`, `customer`).
+
+---
+
+🧹 CORE WORKFLOW (BOOKING FLOW)
+
+1. **Provider lists a service** (e.g., “2 BHK Deep Cleaning”) with title, description, base price, category, media, etc.
+2. **Customer searches** based on location, price, rating, and category (location is auto-picked from provider’s profile, not manually entered per service).
+3. **Customer books** a service:
+   - Uploads multiple photos of the cleaning area (stored in S3, referenced by URL).
+   - Chooses date/time and estimated duration.
+   - System calculates price and stores a **pricingSnapshot** (with currency).
+   - System stores a **cancellationPolicySnapshot** (free cancel before provider acceptance, 15% after).
+   - Creates a `Booking` document (`pending_payment` status).
+4. **Customer pays via Stripe** (single PaymentIntent for service, separate one for tip).
+5. **Booking lifecycle:**
+   - `pending_payment` → `pending_provider_accept` → `accepted` → `in_progress` → `completed` (OTP verified)
+   - Auto-expire if provider doesn’t accept in time.
+   - Cancellation allowed with rules (free before acceptance, 15% fee after).
+6. **Service completion:** Customer gives a 4–6 digit OTP to provider; provider must enter it to mark the job as `completed`.
+7. **Dispute window:** 48h after completion. If no dispute, payout is auto-released (75% to provider, 25% to platform, 100% of tips to provider).
+8. **Refunds/disputes:** Admin can hold payouts, partially or fully refund payment and/or tip.
+
+---
+
+💰 PAYMENT LOGIC
+
+- Platform takes **25% commission** on service price.
+- **75%** goes to provider (after dispute window).
+- Tips are **100% provider-owned**, tracked separately.
+- All payments happen **inside platform** with **Stripe**.
+- Payouts happen via **Stripe Connect (Express)**.
+- Refunds can be processed (including tip) in dispute cases.
+- Multi-currency support planned later → default currency: **USD** everywhere.
+
+---
+
+📸 PHOTO HANDLING
+
+- Customers must upload one or more images before booking (S3 URLs stored in DB).
+- Providers may upload “after cleaning” photos.
+- Photos are visible to provider **before acceptance** and stored as an array of objects with metadata (width, size, uploadedBy).
+
+---
+
+📊 CURRENT SCHEMA STATUS
+
+✅ **User model** – unified with role-based fields:  
+- `name`, `email`, `phone`, `passwordHash`, `role`, `status`, `gender`, `dateOfBirth`, `profilePhoto`
+- `providerProfile`: approvalStatus, serviceAddress (with geo-coordinates), kyc, payoutInfo (Stripe account ID), totalEarnings, blockedDates, documents, avgRating
+- `customerProfile`: defaultAddress, savedAddresses
+- OAuth/social login fields included
+
+✅ **ServiceCategory model** – basic fields:
+- `name`, `slug`, `description`, `active`, `createdAt`, `updatedAt`
+
+✅ **Service model** – linked to provider and category:
+- `providerId`, `categoryId`, `title`, `description`, `basePrice`, `currency`, `priceUnit`, `minHours`, `includes`, `exclusions`, `media`, `isActive` (provider-controlled), `isVisible` (admin-controlled), `ratingSummary`
+
+✅ **Booking model** – core of the system:
+- `customerId`, `providerId`, `serviceId`, `categoryId`, `status`, `scheduledAt`, `durationHours`, `photos`, `serviceAddress`, `pricingSnapshot` (with currency), `cancellationPolicySnapshot`, `payment`, `payout`, `tipSummary` (with currency), `completionOtp`, lifecycle timestamps (`acceptedAt`, `completedAt`, etc.), `autoExpireAt`, `chatThreadId`, `notes`, `specialInstructions`
+
+✅ **Booking extras:**
+- OTP verification required for marking booking as completed.
+- Auto-expiry for unaccepted bookings.
+- Cancellation policy snapshot stored for each booking.
+- Tip currency and payment currency included.
+- Photos include metadata (`s3Key`, size, width, uploadedBy).
+
+---
+
+📦 MODELS STILL TO BE BUILT
+
+➡️ **PaymentTransaction (next)** – Tracks actual payment event:
+- bookingId, customerId, providerId, paymentIntentId, chargeId, amount, applicationFee, transferAmount, currency, method, status, refundedAmount, refundedAt
+
+➡️ **TipTransaction** – Separate model for tip payments (100% to provider, refundable).
+
+➡️ **Review** – Customer review and rating after completion.
+
+➡️ **Dispute** – Dispute record with evidence (photos, chat logs, etc.), status, resolution info.
+
+➡️ **Notification** – For push and in-app notifications.
+
+➡️ **AuditLog** – Track admin actions (payout holds, dispute resolutions, refunds).
+
+---
+
+📍TECHNICAL CONTEXT
+
+- **Backend:** Node.js + Express  
+- **Database:** MongoDB (Mongoose, JavaScript)  
+- **Auth:** JWT + OAuth (Google/Apple)  
+- **Media:** AWS S3  
+- **Payments:** Stripe (PaymentIntent + Connect Payouts)  
+- **Frontend:** Next.js + TypeScript + Tailwind (web), React Native (app)
+
+---
+
+📍CURRENT STATUS (as of last session):
+
+We have finished designing:
+- User model  
+- ServiceCategory model  
+- Service model  
+- Booking model (with OTP, photos, pricing, cancellation, tips, payout)  
+
+✅ **Next task:** Implement `PaymentTransaction` model for handling and storing actual payment details for each booking, including commission split, payout tracking, refunds, and Stripe references.
+
+---
+
+🎯 INSTRUCTION FOR NEXT SESSION
+
+Start by designing the **`PaymentTransaction` model** in MongoDB (JavaScript / Mongoose).  
+It must be tightly linked to `Booking`, include `currency`, and handle refunds, commission, transfer amounts, and payout logic.  
+Also prepare for future analytics and dispute workflows.

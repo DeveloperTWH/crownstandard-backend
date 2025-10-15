@@ -1,0 +1,269 @@
+🧠 CrownStandard – Full Project Context
+
+📦 Project Overview
+
+CrownStandard is a full-stack web and mobile platform similar to Urban Company, but focused exclusively on cleaning services.
+It connects two main user types:
+
+🧑‍🔧 Service Providers – register, get approved, and list cleaning services (home, office, deep cleaning, etc.).
+👤 Customers – browse, filter, and book services, uploading images of the location for custom quotes.
+🧑‍💼 Admin – manages approvals, disputes, payouts, and overall platform operations.
+
+
+
+🌐 High-Level Flow
+
+1. Authentication & User Onboarding
+
+ Users register as customer, provider, or admin.
+ Providers complete KYC, submit address and documents.
+ Admin approves or rejects provider registration.
+ OAuth (Google) supported.
+
+2. Service Listing
+
+ Providers create and manage cleaning service listings with pricing, media, description, etc.
+ Admin controls visibility and approval.
+ Searchable by category, price, rating, and location.
+
+3. Geo-based Discovery
+
+ Customers search services based on their current location (lat, lng, radius).
+ System performs $geoNear query on provider’s location, then $lookup services.
+ Results are sorted by distance, price, or rating.
+
+4. Booking Flow
+
+ Customers select a service, choose a time, and upload photos of the place.
+ Providers can accept/reject booking.
+ OTP verification upon booking confirmation.
+ Bookings include payment breakdown, status, and uploaded images.
+
+5. Payments & Payouts
+
+ Payments handled via Stripe:
+
+   25% platform commission
+   75% provider payout
+   100% tips go directly to provider
+ Dispute window: 48 hours post-service before payout is released.
+ Admin can hold/refund payouts.
+
+6. Reviews, Ratings & Disputes
+
+ Customers leave reviews and ratings post-service.
+ Disputes handled by admin, with evidence (photos, messages).
+ Refunds and partial refunds supported.
+
+7. Promotions, Subscriptions, and Coupons (Future-ready)
+
+ Providers may subscribe for boosted visibility.
+ Platform-wide coupon codes supported.
+ Priority ranking logic will consider subscription tier.
+
+
+
+✅ Completed Work (So Far)
+
+1. Project Setup
+
+ Node.js + Express backend with MongoDB & Mongoose.
+ Environment setup, DB connection, and .env support.
+ Project structured with models/, controllers/, routes/, utils/, config/, etc.
+
+2. Authentication APIs
+
+ register / login / me / updateMe
+ forgotPassword / resetPassword
+ Google OAuth login/registration
+ Role-based middleware (auth.js, requireRole.js)
+
+3. Admin APIs
+
+ Approve/reject providers
+ Manage users
+
+4. Service Category APIs
+
+ CRUD APIs for categories
+ Search and list categories
+
+5. Core Models Created
+
+ User
+ ServiceCategory
+ Service
+ Booking
+ PaymentTransaction
+ TipTransaction
+ Review
+ Dispute
+ Payout
+ Coupon
+ Subscription
+ Invoice
+ ChatThread
+ ChatMessage
+ Notification
+ AuditLog
+
+6. Core APIs Implemented
+
+ Full Auth flow
+ Google OAuth
+ Category CRUD
+ Provider service creation with validation (KYC, approval checks)
+ Customer-side service discovery (with location + filters + pagination)
+ $geoNear-based search (now using User → $lookup Service)
+
+
+
+🧬 Models – Final Fields Summary
+
+🧑‍💼 User Model
+
+name, email, phone, passwordHash, role, status
+profilePhoto, gender, dateOfBirth
+providerProfile:
+
+approvalStatus, serviceAddress (with 2dsphere location),
+kyc, payoutInfo, totalEarnings, blockedDates
+customerProfile:
+
+defaultAddress, savedAddresses
+oauthProvider for Google sign-in
+
+
+
+🧹 ServiceCategory Model
+
+name, slug, description, active
+
+
+
+🧰 Service Model
+
+providerId, categoryId, title, description
+basePrice, currency, priceUnit, minHours
+includes, exclusions, media
+isActive, isVisible
+ratingSummary (avg + count)
+softDeleted
+
+
+
+📅 Booking Model
+
+customerId, providerId, serviceId
+dateTime, status, otp
+price, currency, paymentStatus
+photos (S3), location, notes
+cancellationPolicySnapshot
+
+
+
+💳 PaymentTransaction Model
+
+bookingId, customerId, providerId
+paymentIntentId, chargeId
+currency, amount, applicationFee, transferAmount
+method, status, refundedAmount
+
+
+
+💸 TipTransaction Model
+
+bookingId, customerId, providerId
+tipAmount, currency, status
+
+
+
+🧾 Invoice Model
+
+bookingId, customerId, providerId
+invoiceNumber, amount, currency, status
+
+
+
+📩 Chat Models
+
+ChatThread: participants, bookingId, status
+ChatMessage: sender, message, timestamps
+
+
+
+🛠️ Utility Models
+
+Notification: userId, message, type, read, metadata
+AuditLog: adminId, action, target, meta
+Dispute: bookingId, reason, evidence, resolution
+Payout: providerId, amount, status, releaseDate
+Coupon: code, discount, validFrom, validTo, usageLimit
+Subscription: providerId, plan, tier, expiry, features
+
+
+
+🔌 API Highlights (Implemented)
+
+🔐 Auth APIs
+
+POST /auth/register
+POST /auth/login
+POST /auth/oauth/google
+POST /auth/forgot-password
+POST /auth/reset-password
+GET /auth/me
+PATCH /auth/me
+
+
+
+📂 Category APIs
+
+POST /categories
+GET /categories
+GET /categories/:id
+PATCH /categories/:id
+DELETE /categories/:id
+
+
+
+🧰 Service APIs
+
+POST /services – Create service (provider only, with KYC/approval check)
+GET /services – Customer-side service search
+
+Supports geo-based filtering (lat, lng, radius)
+Supports filters: categoryId, minPrice, maxPrice, search, sort
+Pagination with page, limit
+
+
+
+🧠 Logic – Service Discovery (Current Implementation)
+
+$geoNear runs on User (providers) using providerProfile.serviceAddress.location
+Filters applied:
+
+status: "approved" or "active"
+Verified KYC & approval
+$lookup to get provider’s active & visible services
+Final result sorted by distance, rating, or price
+Pagination applied after filtering
+Only providers with at least one valid service are returned
+
+
+
+🚀 Next Steps (Upcoming Work)
+
+📅 Booking APIs: Create, list, cancel, confirm (OTP), etc.
+💳 Stripe Integration: PaymentIntent, transfer, tip handling, refund logic.
+📜 Review APIs: Add review, get reviews for service/provider.
+⚖️ Dispute APIs: Raise, resolve, refund flow.
+💸 Payout APIs: Automatic + admin-triggered release.
+📈 Analytics: Admin dashboards, earnings reports, provider stats.
+📬 Notification System: Real-time push + email + in-app alerts.
+🛜 Chat APIs: Real-time messaging between customer & provider.
+🎁 Promotions & Subscriptions: Implement subscription plans and coupon discounts.
+
+
+
+“Let’s continue the CrownStandard backend project from here. We’re at the stage where we need to implement Booking APIs and payment workflows.”

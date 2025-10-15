@@ -1,0 +1,175 @@
+Crownstandard API Development Phase
+
+You are working on a full-stack platform called Crownstandard, a cleaning-services marketplace similar to *Urban Company* but focused exclusively on cleaning services.
+We have already finalized the entire backend data architecture and models, and now we’re starting the API layer development phase.
+
+---
+
+📦 Project Summary (Backend)
+
+🎯 Platform Roles:
+
+* 👤 Customer: Book services, upload place photos, pay online, tip providers, leave reviews, and raise disputes.
+* 🧑‍🔧 Service Provider: List services, accept bookings, perform jobs, receive payouts, and manage availability.
+* 🧑‍💼 Admin: Approve providers, resolve disputes, control payouts, manage visibility of services/reviews, and send platform-wide notifications.
+
+🧱 Tech Stack:
+
+* Backend: Node.js + Express.js
+* Database: MongoDB (Mongoose ODM)
+* Payments: Stripe (Connect, PaymentIntent, Transfer, Refund APIs)
+* Auth: JWT + optional OAuth (Google/Apple)
+* Storage: AWS S3 for images (booking photos, review media, evidence)
+
+---
+
+📁 ✅ Completed: Data Models
+
+All backend models are designed, reviewed, and finalized:
+
+1. User – unified model with provider/customer/admin profiles
+2. ServiceCategory – categories of cleaning services
+3. Service – provider-listed cleaning services
+4. Booking – core transaction unit with OTP verification
+5. PaymentTransaction – main booking payment
+6. TipTransaction – separate tip payments
+7. Review – post-service customer feedback
+8. Dispute – complaint handling and refund workflow
+9. Notification – in-app and push notification logs
+10. AuditLog – admin/system actions for traceability
+
+All relationships, indexes, and references are properly mapped.
+
+---
+
+📍 Current Status
+
+✅ Schema Layer: 100% complete
+✅ Data relationships: Finalized and documented
+✅ Business Logic: Defined (payouts, disputes, tips, cancellation rules, etc.)
+✅ Auth Flows: Login, Forgot Password, and Dashboard linking are implemented
+
+🧭 Next: Start building the API layer
+
+---
+
+🚀 API Development Plan (Where to Start)
+
+We will now implement RESTful API routes module by module, following this sequence:
+
+---
+
+1. 🔐 Auth & User APIs
+
+* POST /auth/register — Register customer or provider
+* POST /auth/login — JWT-based login
+* POST /auth/forgot-password / POST /auth/reset-password — Password reset
+* GET /auth/me — Get current user profile
+* PUT /auth/me — Update profile
+* POST /auth/oauth/google — Google login (optional)
+
+---
+
+2. 👤 User Management APIs
+
+* GET /users/:id — Fetch user details (admin)
+* PUT /users/:id/approve — Approve/reject provider
+* PUT /users/:id/status — Suspend/reactivate account
+* GET /providers — List approved providers
+
+---
+
+3. 🧹 Service & Category APIs
+
+* POST /categories / GET /categories — Manage categories
+* POST /services / GET /services / PUT /services/:id — CRUD operations
+* GET /services?location&price&rating — Filtered search
+* PATCH /services/:id/visibility — Admin show/hide service
+
+---
+
+4. 📅 Booking APIs
+
+* POST /bookings — Create booking (requires photos)
+* GET /bookings / GET /bookings/:id — Retrieve bookings
+* PATCH /bookings/:id/cancel — Cancel booking (apply policy)
+* PATCH /bookings/:id/accept — Provider accepts booking
+* PATCH /bookings/:id/complete — OTP verification to complete booking
+
+---
+
+5. 💳 Payment & Tip APIs
+
+* POST /payments/create-intent — Create PaymentIntent (booking)
+* POST /payments/webhook — Handle Stripe events
+* GET /payments/:bookingId — Get payment details
+* POST /tips/create-intent — Create Tip PaymentIntent
+* POST /tips/refund — Refund tip
+* POST /payments/refund — Refund booking (admin only)
+
+---
+
+6. ⭐ Review APIs
+
+* POST /reviews — Submit a review (only after completion)
+* GET /reviews?serviceId= — Fetch reviews for a service
+* PATCH /reviews/:id/hide — Admin hides review
+
+---
+
+7. ⚖️ Dispute APIs
+
+* POST /disputes — Raise a dispute
+* GET /disputes / GET /disputes/:id — List or view disputes
+* PATCH /disputes/:id/resolve — Admin resolves (refund/no refund)
+
+---
+
+8. 🔔 Notification APIs
+
+* GET /notifications — Fetch notifications for a user
+* PATCH /notifications/:id/read — Mark as read
+* POST /notifications — Send custom notification (admin)
+
+---
+
+9. 🧾 AuditLog APIs
+
+* GET /audit-logs — View system/admin activity
+* GET /audit-logs/:id — Inspect specific event details
+
+---
+
+💸 Business Rules (Implemented at API level)
+
+* Platform commission: 25% per booking
+* Provider payout: 75% (released automatically after 48h dispute window unless on hold)
+* Tip payout: 100% to provider (refundable via dispute system)
+* Cancellation policy: Free before provider accepts, 15% fee after
+* Dispute: Must be raised within 48h after completion
+* Refunds: Full or partial, handled via Stripe and linked to Dispute resolution
+
+---
+
+📊 Recommended API Design Practices
+
+* Use JWT middleware for route protection and role-based access.
+* Use Mongoose populate() for related data (service, provider, customer, etc.).
+* Add pagination & filters for all list endpoints.
+* Create a Stripe webhook handler to update PaymentTransaction and TipTransaction statuses automatically.
+* Implement admin-level routes under /admin/* with role verification.
+* Log every sensitive action in AuditLog.
+
+---
+
+📍 Where to Start Now
+
+✅ All database models are ready.
+✅ Business logic and payment flows are finalized.
+
+👉 Start coding from the Auth & User APIs module (/auth/*, /users/*), then progress through services → bookings → payments → disputes.
+
+---
+
+Goal: Use the above context to start writing production-grade Express.js APIs for Crownstandard. Focus first on the authentication and user onboarding layer, then move toward service listing and booking creation.
+
