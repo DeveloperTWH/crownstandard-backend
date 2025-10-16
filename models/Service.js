@@ -46,7 +46,7 @@ const ServiceSchema = new Schema(
     },
     currency: {
       type: String,
-      default: "USD",
+      default: "CAD",
       required: true,
     },
     priceUnit: {

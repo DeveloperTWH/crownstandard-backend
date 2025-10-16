@@ -41,7 +41,7 @@ const InvoiceSchema = new Schema(
     },
 
     // 💰 Amount breakdown
-    currency: { type: String, default: "USD", required: true },
+    currency: { type: String, default: "CAD", required: true },
     lineItems: [LineItemSchema], // detailed breakdown
 
     subtotal: { type: Number, required: true }, // before tax

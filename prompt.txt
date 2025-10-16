@@ -47,7 +47,7 @@ All users are stored in a **single `User` model** with a `role` field (`admin`, 
 - All payments happen **inside platform** with **Stripe**.
 - Payouts happen via **Stripe Connect (Express)**.
 - Refunds can be processed (including tip) in dispute cases.
-- Multi-currency support planned later → default currency: **USD** everywhere.
+- Multi-currency support planned later → default currency: **CAD** everywhere.
 
 ---
 

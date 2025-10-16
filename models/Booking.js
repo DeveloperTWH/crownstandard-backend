@@ -18,7 +18,7 @@ const PhotoSchema = new Schema(
 
 const PricingSnapshotSchema = new Schema(
   {
-    currency: { type: String, default: "USD", required: true },
+    currency: { type: String, default: "CAD", required: true },
     basePrice: { type: Number, required: true },
     priceUnit: { type: String, enum: ["per_hour", "per_service"], required: true },
     minHours: Number,
@@ -78,8 +78,6 @@ const BookingSchema = new Schema(
         "accepted",
         "in_progress",
         "completed",
-        "settlement_scheduled", // ✅ new
-        "settled",              // ✅ new
         "cancelled",
         "auto_expired",
         "payment_failed",
@@ -104,8 +102,10 @@ const BookingSchema = new Schema(
       state: String,
       country: String,
       postalCode: String,
-      lat: Number,
-      lng: Number,
+      location: {
+        type: { type: String, enum: ["Point"], default: "Point" },
+        coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
+      },
     },
 
     // 💰 Snapshot of pricing at booking time
@@ -122,18 +122,20 @@ const BookingSchema = new Schema(
         enum: ["pending", "succeeded", "failed", "refunded", "partial_refunded"],
         default: "pending",
       },
-      amount: Number,            // total amount paid by customer
-      applicationFee: Number,    // 25% platform fee
-      transferAmount: Number,    // 75% provider payout
+      amount: Number,
+      currency: { type: String, default: "CAD" }, // ✅ add this
+      applicationFee: Number,
+      transferAmount: Number,
       refundedAmount: { type: Number, default: 0 },
+      capturedAt: Date, // ✅ optional but useful
     },
 
     // 💸 Payout info (Stripe transfer to provider)
     payout: {
       status: {
         type: String,
-        enum: ["pending", "on_hold", "released", "failed", "cancelled"],
-        default: "pending",
+        enum: ["not_completed_yet", "pending", "on_hold", "released", "failed", "cancelled"],
+        default: "not_completed_yet",
         index: true,
       },
       transferId: String,
@@ -146,7 +148,7 @@ const BookingSchema = new Schema(
     tipSummary: {
       hasTip: { type: Boolean, default: false },
       totalTip: { type: Number, default: 0 },
-      currency: { type: String, default: "USD", required: true },
+      currency: { type: String, default: "CAD", required: true },
     },
 
     // ✅ OTP verification for service start/completion
@@ -173,12 +175,17 @@ const BookingSchema = new Schema(
     chatThreadId: { type: Schema.Types.ObjectId, ref: "ChatThread" },
     notes: String,
     specialInstructions: String,
+    rejection: {
+      reason: { type: String },
+      rejectedAt: Date,
+    },
   },
   { timestamps: true }
 );
 
 // ✅ Useful indexes
 BookingSchema.index({ providerId: 1, scheduledAt: 1 });
+BookingSchema.index({ "serviceAddress.location": "2dsphere" });
 BookingSchema.index({ customerId: 1, scheduledAt: 1 });
 BookingSchema.index({ status: 1 });
 BookingSchema.index({ autoExpireAt: 1 });

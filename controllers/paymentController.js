@@ -5,60 +5,79 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 exports.createPaymentIntent = async (req, res) => {
   try {
-    const { id: bookingId } = req.params;
+    const { bookingId } = req.body;
     const customerId = req.user._id;
 
-    // 1️⃣ Find booking and validate ownership
+    // 1️⃣ Validate input
+    if (!bookingId) {
+      return res.status(400).json({ message: "Booking ID is required." });
+    }
+
+    // 2️⃣ Fetch booking
     const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (!booking) return res.status(404).json({ message: "Booking not found." });
 
+    // ✅ Only the customer who created the booking can pay
     if (booking.customerId.toString() !== customerId.toString()) {
-      return res.status(403).json({ message: "Not authorized to pay for this booking" });
+      return res.status(403).json({ message: "You are not authorized to pay for this booking." });
     }
 
-    // 2️⃣ Validate status
+    // ✅ Payment can only be created if status is `pending_payment`
     if (booking.status !== "pending_payment") {
-      return res.status(400).json({ message: "Booking is not awaiting payment" });
+      return res.status(400).json({
+        message: `Cannot create payment for a booking in status: ${booking.status}`,
+      });
     }
 
-    // 3️⃣ Create Stripe PaymentIntent
-    const amountInCents = Math.round(booking.pricingSnapshot.totalPayable * 100);
+    // 3️⃣ Pull amount and currency from DB (secure — ignore client input)
+    const amount = booking.pricingSnapshot?.totalPayable;
+    const currency = booking.pricingSnapshot?.currency || "CAD";
 
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Invalid booking amount." });
+    }
+
+    // 4️⃣ Create Stripe PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountInCents,
-      currency: booking.pricingSnapshot.currency.toLowerCase(),
-      automatic_payment_methods: { enabled: true },
+      amount: Math.round(amount * 100), // Stripe uses cents
+      currency,
       metadata: {
         bookingId: booking._id.toString(),
         customerId: booking.customerId.toString(),
         providerId: booking.providerId.toString(),
       },
+      automatic_payment_methods: { enabled: true },
     });
 
-    // 4️⃣ Save PaymentTransaction in DB
-    await PaymentTransaction.create({
+    // 5️⃣ Save transaction record
+    const transaction = await PaymentTransaction.create({
       bookingId: booking._id,
       customerId: booking.customerId,
       providerId: booking.providerId,
       paymentIntentId: paymentIntent.id,
-      amount: booking.pricingSnapshot.totalPayable,
-      applicationFee: booking.pricingSnapshot.totalPayable * 0.25, // example 25% commission
-      transferAmount: booking.pricingSnapshot.totalPayable * 0.75,
-      currency: booking.pricingSnapshot.currency,
+      currency,
+      amount,
+      applicationFee: booking.pricingSnapshot.platformCommission,
+      transferAmount: booking.pricingSnapshot.providerShare,
       method: "card",
       status: "pending",
     });
 
-    // 5️⃣ Return client secret for frontend to confirm payment
+    // 6️⃣ Update booking with paymentIntent ID
+    booking.payment.paymentIntentId = paymentIntent.id;
+    booking.payment.status = "pending";
+    booking.payment.amount = amount;
+    booking.payment.currency = currency;
+    await booking.save();
+
     return res.status(201).json({
-      message: "PaymentIntent created successfully",
-      paymentIntentId: paymentIntent.id,
+      message: "PaymentIntent created successfully.",
       clientSecret: paymentIntent.client_secret,
-      amount: booking.pricingSnapshot.totalPayable,
-      currency: booking.pricingSnapshot.currency,
+      paymentIntentId: paymentIntent.id,
+      transactionId: transaction._id,
     });
   } catch (err) {
-    console.error("Stripe PaymentIntent error:", err);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Payment Intent Error:", err);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };

@@ -27,7 +27,7 @@ const PaymentTransactionSchema = new Schema(
     chargeId: { type: String, index: true },
 
     // 💰 Amount breakdown
-    currency: { type: String, default: "USD", required: true },
+    currency: { type: String, default: "CAD", required: true },
     amount: { type: Number, required: true },           // total paid by customer
     applicationFee: { type: Number, required: true },   // platform fee (e.g., 25%)
     transferAmount: { type: Number, required: true },   // payout amount (e.g., 75%)

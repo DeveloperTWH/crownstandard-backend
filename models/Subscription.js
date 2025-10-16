@@ -15,7 +15,7 @@ const SubscriptionSchema = new Schema(
     },
     currency: {
       type: String,
-      default: "USD",
+      default: "CAD",
     },
     billingCycle: {
       type: String,

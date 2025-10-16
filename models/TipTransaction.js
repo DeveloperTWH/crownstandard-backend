@@ -28,7 +28,7 @@ const TipTransactionSchema = new Schema(
 
     // 💰 Tip details
     amount: { type: Number, required: true },
-    currency: { type: String, default: "USD", required: true },
+    currency: { type: String, default: "CAD", required: true },
 
     // 📊 Payment status
     status: {

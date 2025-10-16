@@ -34,7 +34,7 @@ const PayoutSchema = new Schema(
     },
     currency: {
       type: String,
-      default: "USD",
+      default: "CAD",
     },
 
     // 🪙 Idempotency (prevents double payout creation)
@@ -46,11 +46,11 @@ const PayoutSchema = new Schema(
       enum: ["booking", "tip", "adjustment", "refund"],
       default: "booking",
     },
-
+    adjustmentReason: { type: String },
     // 📤 Payout lifecycle status
     status: {
       type: String,
-      enum: ["scheduled", "transferred", "on_hold", "failed"],
+      enum: ["scheduled", "processing", "transferred", "on_hold", "failed"],
       default: "scheduled",
       index: true,
     },
