@@ -1,16 +1,26 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
+// 📎 Evidence attached to a dispute
 const EvidenceSchema = new Schema(
   {
-    type: { type: String, enum: ["photo", "text", "document", "chat"], default: "photo" },
-    url: String, // S3 URL or chat message reference
-    uploadedBy: { type: String, enum: ["customer", "provider", "system"], default: "customer" },
+    type: {
+      type: String,
+      enum: ["photo", "text", "document", "chat"],
+      default: "photo",
+    },
+    url: String, // S3 URL or chat reference
+    uploadedBy: {
+      type: String,
+      enum: ["customer", "provider", "system"],
+      default: "customer",
+    },
     uploadedAt: { type: Date, default: Date.now },
   },
   { _id: false }
 );
 
+// 🧑‍⚖️ Final decision details
 const DecisionSchema = new Schema(
   {
     outcome: {
@@ -27,6 +37,7 @@ const DecisionSchema = new Schema(
 
 const DisputeSchema = new Schema(
   {
+    // 🔗 Core references
     bookingId: {
       type: Schema.Types.ObjectId,
       ref: "Booking",
@@ -56,30 +67,56 @@ const DisputeSchema = new Schema(
     },
 
     // 📣 Dispute details
+    disputeType: {
+      type: String,
+      enum: ["service_quality", "refund_request", "fraud", "other"],
+      default: "service_quality",
+      index: true,
+    },
+    disputeSource: {
+      type: String,
+      enum: ["customer", "provider", "system"],
+      default: "customer",
+    },
     reason: { type: String, required: true },
-    description: { type: String },
+    description: String,
     evidence: [EvidenceSchema],
 
-    // 📊 Status
+    // 📊 Status tracking
     status: {
       type: String,
       enum: ["open", "under_review", "resolved", "cancelled"],
       default: "open",
       index: true,
     },
+    refundStatus: {
+      type: String,
+      enum: ["not_applicable", "pending", "processed", "failed"],
+      default: "not_applicable",
+      index: true,
+    },
 
     // 🧑‍⚖️ Final decision
     decision: DecisionSchema,
 
-    resolvedBy: { type: Schema.Types.ObjectId, ref: "User" }, // admin
+    // 🧑‍💻 Admin & resolution tracking
+    resolvedBy: { type: Schema.Types.ObjectId, ref: "User" },
     resolvedAt: Date,
+    reviewStartedAt: Date,
+    adminNotes: String,
+
+    // 🔗 External system references (e.g., Stripe dispute)
+    externalRef: { type: String, index: true },
+
   },
   { timestamps: true }
 );
 
-// ✅ Indexes
+// ✅ Useful indexes
 DisputeSchema.index({ providerId: 1, status: 1 });
 DisputeSchema.index({ bookingId: 1, status: 1 });
+DisputeSchema.index({ disputeType: 1 });
+DisputeSchema.index({ refundStatus: 1 });
 
 const Dispute = mongoose.model("Dispute", DisputeSchema);
 module.exports = Dispute;

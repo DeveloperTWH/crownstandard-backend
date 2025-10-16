@@ -8,6 +8,9 @@ const app = express();
 
 // 🔌 Middlewares
 app.use(cors());
+
+app.use("/api", require("./routes/webhookRoutes"));
+
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
@@ -22,6 +25,8 @@ app.use("/service", require("./routes/service.routes"));
 app.use("/providers", require("./routes/provider.routes"));
 app.use("/services", require("./routes/service.public.routes"));      // public
 app.use("/services", require("./routes/service.routes"));             // provider (create/update/delete/my)
+app.use("/api", require("./routes/bookingRoutes"));
+app.use("/api", require("./routes/paymentRoutes"));
 
 
 app.get("/", (req, res) => {
