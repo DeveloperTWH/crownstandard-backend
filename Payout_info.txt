@@ -1,0 +1,195 @@
+CrownStandard – Payout Module Master Prompt (Full Architecture + Flow)
+
+📦 Context
+
+We are building the Payout Module for *CrownStandard*, a full-stack cleaning marketplace (like Urban Company).
+
+* Booking Payment: 75% → provider, 25% → platform.
+* Tips: 100% → provider.
+* Disputes: If a dispute occurs, payout waits until resolution. Partial refunds reduce payout accordingly.
+* Tipping Window: Tips can be given within 24 hours of service completion.
+* Payout Delay: Payouts are processed after 48 hours of service completion (if no dispute).
+* Single Payout: Booking share + Tip are always combined into a single payout transaction.
+
+---
+
+🏗️ Payout Architecture Overview
+
+The payout system is designed around EventBridge + SQS + Lambda/Worker for scalable, reliable, and event-driven execution. It avoids cron-jobs and ensures retry logic, dispute awareness, and audit trails.
+
+🧱 Core Components
+
+#1. Services Layer (/payout/service)
+
+* payoutService.js → Core payout logic (calculation, creation, execution, retries).
+* bookingService.js → Fetch booking details, verify eligibility (completed, 48h passed, no dispute).
+* paymentService.js → Validate payment status (succeeded, partial refund, etc.).
+* tipService.js → Fetch tip data and calculate total tip amount.
+* disputeService.js → Check if disputes are open and how they affect payout.
+
+#2. Workers (/payout/workers)
+
+* payoutWorker.js → Consumes SQS messages and triggers payout logic.
+* retryWorker.js → Re-processes failed payouts (up to 3 retries) and handles exponential backoff.
+
+#3. Events (/payout/events)
+
+* eventPublisher.js → Publishes domain events (e.g., PAYOUT_SCHEDULED, PAYOUT_RELEASED) to EventBridge.
+* eventListener.js → Listens to events (e.g., Booking Completed) and pushes SQS jobs for payouts.
+
+#4. Utils (/payout/utils)
+
+* auditLogger.js → Records every payout attempt, success, failure, or refund into AuditLog.
+* currencyHelper.js → Ensures payout and tip currency are aligned or converted if needed.
+
+---
+
+🔁 End-to-End Payout Flow
+
+1. Booking Completion
+
+* Provider marks booking as completed → OTP verified → Booking status becomes completed.
+* payout.status is set to not_completed_yet.
+* A record of eligibleForReleaseAt = completedAt + 48h is stored in booking.
+
+2. Event Trigger
+
+* EventBridge runs every hour and finds bookings with status = completed and eligibleForReleaseAt <= now.
+* It checks if disputeStatus = none. If dispute is open, payout is skipped until resolved.
+
+3. SQS Message Creation
+
+* EventBridge sends message { bookingId } to SQS queue.
+* SQS triggers payoutWorker.js.
+
+4. Payout Worker Execution
+
+* Worker fetches booking, verifies:
+
+  * ✅ Booking completed
+  * ✅ 48 hours passed
+  * ✅ Payment succeeded
+  * ✅ No dispute OR dispute resolved
+* Calculates payout:
+
+  * providerShare (75% of total payable - refundedAmount if any)
+  * + totalTip (if provided)
+  * Adjusts if partial refunds occurred.
+
+5. Payout Creation (payoutService.js)
+
+* Creates a record in Payout collection:
+
+  * bookingId, paymentTransactionId, tipTransactionId
+  * total amount (providerShare + tips - refund adjustments)
+  * currency, payoutType, releaseDate
+* Publishes PAYOUT_SCHEDULED event.
+* Logs PAYOUT_SCHEDULED in AuditLog.
+
+6. Stripe Transfer Execution
+
+* releasePayout() is triggered:
+
+  * Executes stripe.transfers.create() to send money to provider’s connected account.
+  * Updates Payout.status = released and stores stripeTransferId.
+  * Updates Booking.payout.status = released.
+
+7. Failure & Retry Logic
+
+* If Stripe transfer fails:
+
+  * Payout.status = failed
+  * Audit log entry PAYOUT_FAILED
+  * retryWorker.js retries up to 3 times with exponential backoff.
+* If still failing after 3 attempts → alert admin & mark Payout.status = failed.
+
+---
+
+🧮 Payout Calculation Formula
+
+js
+// Booking share (after refund)
+providerShare = booking.pricingSnapshot.providerShare - booking.payment.refundedAmount
+
+// Add tips (if any)
+if (booking.tipSummary.hasTip) {
+  providerShare += booking.tipSummary.totalTip
+}
+
+// Final payout amount
+totalPayout = providerShare
+
+
+* If partial refund is issued → subtract from providerShare.
+* If tip refund is issued → subtract from tip amount.
+* If currency differs → convert before adding.
+
+---
+
+⚖️ Dispute Handling Rules
+
+* If dispute is open → payout is on hold.
+* If dispute is resolved_refunded → payout = remaining amount (after refund).
+* If dispute is resolved_rejected → payout proceeds normally.
+* Once resolved → EventBridge will pick it up in the next cycle and trigger payout.
+
+---
+
+📊 Audit Logging
+
+Every key action logs a record to AuditLog:
+
+| Action             | Description                |
+| ------------------ | -------------------------- |
+| PAYOUT_SCHEDULED | Payout created and queued  |
+| PAYOUT_RELEASED  | Stripe transfer completed  |
+| PAYOUT_FAILED    | Transfer attempt failed    |
+| REFUND_ISSUED    | Refund issued via dispute  |
+| PAYOUT_HELD      | Payout held due to dispute |
+| PAYOUT_RETRIED   | Retry attempt triggered    |
+
+---
+
+🧰 Folder Structure
+
+
+payout/
+├─ service/
+│  ├─ payoutService.js        // core payout logic (create, release)
+│  ├─ bookingService.js       // booking fetch + validation
+│  ├─ paymentService.js       // payment validation + refunds
+│  ├─ tipService.js           // tip fetch & status
+│  ├─ disputeService.js       // dispute checks
+├─ workers/
+│  ├─ payoutWorker.js         // main SQS consumer
+│  ├─ retryWorker.js          // retry failed payouts
+├─ events/
+│  ├─ eventPublisher.js       // publish domain events
+│  ├─ eventListener.js        // listen for booking events
+├─ utils/
+│  ├─ auditLogger.js          // log every action
+│  ├─ currencyHelper.js       // convert currency if needed
+
+
+---
+
+✅ Key Business Rules
+
+1. Payout is single (booking + tip combined).
+2. Payout waits 48 hours post-completion.
+3. Tips accepted for 24 hours after completion.
+4. If dispute → payout is on hold until resolved.
+5. If partial refund → payout reduces proportionally.
+6. If payout fails → retry 3 times with exponential backoff.
+7. Every action is audited.
+8. Event-driven system ensures scalability & reliability.
+
+---
+
+🛠️ How to Restart Development With This Prompt
+
+When restarting the project:
+
+* Provide me with the latest models (Booking, PaymentTransaction, TipTransaction, Payout, Dispute, AuditLog).
+* Then say: “Let’s start payout module” — and I’ll immediately begin coding from payoutService.js onward without needing any explanation.
+

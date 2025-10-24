@@ -61,6 +61,7 @@ const PaymentTransactionSchema = new Schema(
       default: "not_initiated",
     },
     transferId: { type: String }, // Stripe transfer ID (if payout initiated)
+    payoutRefId: { type: Schema.Types.ObjectId, ref: "Payout" },
 
     // ⚖️ Dispute lifecycle
     disputeStatus: {
@@ -84,7 +85,7 @@ const PaymentTransactionSchema = new Schema(
 // ✅ Indexes for performance
 PaymentTransactionSchema.index({ bookingId: 1 });
 PaymentTransactionSchema.index({ paymentIntentId: 1 });
-PaymentTransactionSchema.index({ status: 1 });
+PaymentTransactionSchema.index({ status: 1, disputeStatus: 1 });
 PaymentTransactionSchema.index({ providerId: 1 });
 PaymentTransactionSchema.index({ idempotencyKey: 1 });
 

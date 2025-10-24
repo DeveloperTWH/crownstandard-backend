@@ -115,8 +115,13 @@ const DisputeSchema = new Schema(
 // ✅ Useful indexes
 DisputeSchema.index({ providerId: 1, status: 1 });
 DisputeSchema.index({ bookingId: 1, status: 1 });
+DisputeSchema.index({ bookingId: 1, status: 1, refundStatus: 1 });
 DisputeSchema.index({ disputeType: 1 });
 DisputeSchema.index({ refundStatus: 1 });
+
+DisputeSchema.virtual("isActive").get(function () {
+  return this.status === "open" || this.status === "under_review";
+});
 
 const Dispute = mongoose.model("Dispute", DisputeSchema);
 module.exports = Dispute;

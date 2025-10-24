@@ -55,6 +55,7 @@ const TipTransactionSchema = new Schema(
     transferId: { type: String }, // Stripe transfer ID
     releasedAt: Date, // ✅ renamed from payoutReleasedAt for consistency
     holdReason: String,
+    payoutRefId: { type: Schema.Types.ObjectId, ref: "Payout" },
 
     // ⚖️ Dispute lifecycle
     disputeStatus: {
@@ -81,6 +82,20 @@ TipTransactionSchema.index({ providerId: 1, payoutStatus: 1 });
 TipTransactionSchema.index({ status: 1 });
 TipTransactionSchema.index({ paymentIntentId: 1 });
 TipTransactionSchema.index({ idempotencyKey: 1 });
+TipTransactionSchema.index({
+  payoutStatus: 1,
+  disputeStatus: 1,
+  createdAt: 1,
+});
+
+TipTransactionSchema.virtual("isReadyForPayout").get(function () {
+  return (
+    this.status === "succeeded" &&
+    this.payoutStatus === "not_initiated" &&
+    this.disputeStatus === "none"
+  );
+});
+
 
 const TipTransaction = mongoose.model("TipTransaction", TipTransactionSchema);
 module.exports = TipTransaction;

@@ -11,6 +11,8 @@
   "author": "Satyendra Mishra",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -20,6 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "morgan": "^1.10.1",
+    "node-cron": "^4.2.1",
     "node-geocoder": "^4.4.1",
     "nodemailer": "^7.0.9",
     "slugify": "^1.6.6",

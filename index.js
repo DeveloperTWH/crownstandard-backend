@@ -2,7 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
+const cron = require("node-cron");
 const connectDB = require("./config/db");
+
+const { router: healthRouter } = require("./routes/healthRoute");
 
 const app = express();
 
@@ -32,6 +35,42 @@ app.use("/api", require("./routes/paymentRoutes"));
 app.get("/", (req, res) => {
   res.json({ message: "Crownstandard API is running 🚀" });
 });
+
+app.use("/", healthRouter);
+
+// 🧠 Start background payout workers locally (optional)
+// 🕒 Background Job Scheduling (Production Ready)
+const PayoutWorker = require("./payout/workers/payoutWorker");
+const RetryWorker = require("./payout/workers/retryWorker");
+
+// ✅ Run payout worker every 1 hour
+cron.schedule("*/1 * * * *", async () => {
+  try {
+    console.log("⏰ [Cron] Running hourly payout worker...");
+    if (PayoutWorker.processPendingPayouts) {
+      await PayoutWorker.processPendingPayouts();
+    } else if (PayoutWorker.pollQueue) {
+      console.log("ℹ️ Using pollQueue fallback");
+      await PayoutWorker.pollQueue();
+    }
+    console.log("✅ [Cron] Payout worker completed successfully.");
+  } catch (err) {
+    console.error("❌ [Cron] Payout worker failed:", err);
+  }
+});
+
+// ✅ Run retry worker every 30 minutes
+cron.schedule("*/30 * * * *", async () => {
+  try {
+    console.log("🔁 [Cron] Running retry worker (every 30 min)...");
+    await RetryWorker.processFailedPayouts();
+    console.log("✅ [Cron] Retry worker completed successfully.");
+  } catch (err) {
+    console.error("❌ [Cron] Retry worker failed:", err);
+  }
+});
+
+
 
 
 app.use((err, req, res, next) => {

@@ -143,6 +143,7 @@ const BookingSchema = new Schema(
       eligibleForReleaseAt: Date, // when payout becomes eligible (completed + 48h)
       releasedAt: Date,           // when payout actually happened
     },
+    payoutRefId: { type: Schema.Types.ObjectId, ref: "Payout" },
 
     // 💲 Tip info
     tipSummary: {
@@ -189,6 +190,19 @@ BookingSchema.index({ "serviceAddress.location": "2dsphere" });
 BookingSchema.index({ customerId: 1, scheduledAt: 1 });
 BookingSchema.index({ status: 1 });
 BookingSchema.index({ autoExpireAt: 1 });
+BookingSchema.index({
+  "payout.status": 1,
+  "payout.eligibleForReleaseAt": 1,
+  disputeStatus: 1
+});
+
+BookingSchema.pre("save", function (next) {
+  if (this.isModified("status") && this.status === "completed") {
+    this.payout.eligibleForReleaseAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  }
+  next();
+});
+
 
 const Booking = mongoose.model("Booking", BookingSchema);
 module.exports = Booking;

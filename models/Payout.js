@@ -59,6 +59,7 @@ const PayoutSchema = new Schema(
     releaseDate: Date,           // When payout is scheduled
     transferredAt: Date,         // When payout was actually sent
     attempts: { type: Number, default: 0 }, // Retry attempts counter
+    lastFailedAt: Date,
 
     // ⚠️ Failure / hold metadata
     holdReason: String,
@@ -78,8 +79,13 @@ const PayoutSchema = new Schema(
 
 // ✅ Useful indexes
 PayoutSchema.index({ providerId: 1, status: 1 });
+PayoutSchema.index({ status: 1, releaseDate: 1 });
 PayoutSchema.index({ bookingId: 1 });
 PayoutSchema.index({ payoutType: 1 });
 PayoutSchema.index({ idempotencyKey: 1 });
+
+PayoutSchema.virtual("isRetryEligible").get(function () {
+  return this.status === "failed" && this.attempts < 3;
+});
 
 module.exports = mongoose.model("Payout", PayoutSchema);
