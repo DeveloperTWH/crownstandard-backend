@@ -2,23 +2,49 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const cron = require("node-cron");
 const connectDB = require("./config/db");
+const cron = require("node-cron");
+const cookieParser = require("cookie-parser");
+const PayoutCron = require("./payout/cron/payoutCron");
+const RetryWorker = require("./payout/workers/retryWorker");
 
-const { router: healthRouter } = require("./routes/healthRoute");
 
 const app = express();
 
 // 🔌 Middlewares
-app.use(cors());
+app.use(cors({
+  origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca"],
+  credentials: true
+}));
 
 app.use("/api", require("./routes/webhookRoutes"));
 
+app.use(cookieParser()); 
 app.use(express.json({ limit: "10mb" }));
+app.use(cookieParser());
 app.use(morgan("dev"));
 
 
 connectDB();
+
+// ================== (A) Enable Socket Server ==================
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca"],
+    credentials: true
+  }
+});
+require("./sockets/chat.socket")(io);
+// ================== (B) Attach io to req ==================
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 
 // ✅ Routes
 app.use("/auth", require("./routes/auth.routes"));
@@ -30,47 +56,15 @@ app.use("/services", require("./routes/service.public.routes"));      // public
 app.use("/services", require("./routes/service.routes"));             // provider (create/update/delete/my)
 app.use("/api", require("./routes/bookingRoutes"));
 app.use("/api", require("./routes/paymentRoutes"));
+app.use("/api/chat", require("./routes/chat.routes"));
+
+// admin payout routes
+// app.use("/api/admin/payouts", require("./payout/controllers/payoutController"));
 
 
 app.get("/", (req, res) => {
   res.json({ message: "Crownstandard API is running 🚀" });
 });
-
-app.use("/", healthRouter);
-
-// 🧠 Start background payout workers locally (optional)
-// 🕒 Background Job Scheduling (Production Ready)
-const PayoutWorker = require("./payout/workers/payoutWorker");
-const RetryWorker = require("./payout/workers/retryWorker");
-
-// ✅ Run payout worker every 1 hour
-cron.schedule("*/1 * * * *", async () => {
-  try {
-    console.log("⏰ [Cron] Running hourly payout worker...");
-    if (PayoutWorker.processPendingPayouts) {
-      await PayoutWorker.processPendingPayouts();
-    } else if (PayoutWorker.pollQueue) {
-      console.log("ℹ️ Using pollQueue fallback");
-      await PayoutWorker.pollQueue();
-    }
-    console.log("✅ [Cron] Payout worker completed successfully.");
-  } catch (err) {
-    console.error("❌ [Cron] Payout worker failed:", err);
-  }
-});
-
-// ✅ Run retry worker every 30 minutes
-cron.schedule("*/30 * * * *", async () => {
-  try {
-    console.log("🔁 [Cron] Running retry worker (every 30 min)...");
-    await RetryWorker.processFailedPayouts();
-    console.log("✅ [Cron] Retry worker completed successfully.");
-  } catch (err) {
-    console.error("❌ [Cron] Retry worker failed:", err);
-  }
-});
-
-
 
 
 app.use((err, req, res, next) => {
@@ -80,4 +74,32 @@ app.use((err, req, res, next) => {
 
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+
+  // 🕒 Initialize payout automation
+  console.log("🧭 Initializing payout cron jobs...");
+
+  // Run payout cron every 1 hour
+  cron.schedule("* * * * *", async () => {
+    console.log("🕐 Running payout cron (hourly)...");
+    try {
+      await PayoutCron.runPayoutCron?.();
+      console.log("✅ Hourly payout cron finished.");
+    } catch (err) {
+      console.error("❌ payoutCron error:", err.message);
+    }
+  });
+
+  // Run retry worker every 30 minutes
+  cron.schedule("* * * * *", async () => {
+    console.log("♻️ Running retry worker (every 30 mins)...");
+    try {
+      await RetryWorker.processRetryQueue?.();
+      console.log("✅ Retry worker finished.");
+    } catch (err) {
+      console.error("❌ Retry worker error:", err.message);
+    }
+  });
+});
+

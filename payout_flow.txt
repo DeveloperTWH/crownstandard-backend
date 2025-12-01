@@ -1,0 +1,66 @@
+                             ┌────────────────────────────┐
+                             │  Booking Completed (OTP)   │
+                             │  booking.status=completed  │
+                             └──────────────┬─────────────┘
+                                            │
+                                            v
+                     ┌──────────────────────────────────────────────┐
+                     │ booking.completedAt + 48h → eligibleForPayout│
+                     └──────────────┬───────────────────────────────┘
+                                    │
+                                    v
+                         ┌────────────────────────┐
+                         │   payoutCron.js        │  (runs every hour)
+                         └──────────────┬─────────┘
+                                        │ scans
+                                        v
+                     ┌────────────────────────────────────────┐
+                     │ Find bookings where:                   │
+                     │  • status=completed                    │
+                     │  • eligibleForReleaseAt <= now         │
+                     │  • payment success                     │
+                     │  • disputeStatus = none or resolved    │
+                     └──────────────┬─────────────────────────┘
+                                    │ eligible bookings
+                                    v
+                         ┌────────────────────────────┐
+                         │   payoutService.js         │ (master logic)
+                         └──────────────┬─────────────┘
+                                        │
+                ┌───────────────────────┼────────────────────────────┐
+                │                       │                            │
+                v                       v                            v
+   ┌─────────────────────┐   ┌───────────────────────┐   ┌────────────────────┐
+   │ bookingService.js    │   │ tipService.js          │   │ disputeService.js  │
+   │ validate + fetch     │   │ fetch tip & refunds    │   │ check disputes     │
+   └─────────────────────┘   └───────────────────────┘   └────────────────────┘
+                \____________________  ________________________________/
+                                     v
+                        ┌────────────────────────────┐
+                        │ Calculate payout:           │
+                        │  providerShare - refunds    │
+                        │  + tips - tipRefunds        │
+                        │  = totalPayout              │
+                        └──────────────┬─────────────┘
+                                       │
+                                       v
+                        ┌──────────────────────────┐
+                        │ Stripe Transfer (payout) │
+                        │ stripeClient.transfer()  │
+                        └──────────────┬───────────┘
+                                       │
+            ┌──────────────────────────┼──────────────────────────┐
+            │                          │                          │
+            v                          v                          v
+ ┌───────────────────┐    ┌────────────────────────┐    ┌─────────────────────┐
+ │ SUCCESS           │    │ FAILURE                │    │ payoutService.retry  │
+ │ payout.released   │    │ payout.failed          │    │ increases attempts   │
+ └───────────────────┘    └─────────────┬──────────┘    └─────────────────────┘
+                                        │
+                                        v
+                              ┌────────────────────────┐
+                              │ retryCron.js (2h)      │
+                              │ re-attempt payout      │
+                              │ until attempts = 3     │
+                              └────────────────────────┘
+

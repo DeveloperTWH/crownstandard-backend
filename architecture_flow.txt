@@ -1,0 +1,17 @@
+payoutCron.js
+     |
+     v
+bookingService.js -----> disputeService.js -----> tipService.js -----> paymentService.js
+     |                     |                         |                      |
+     \_______________________________________________|______________________/
+                                                      |
+                                                      v
+                                             payoutService.js
+                                                      |
+                                                      v
+                                                stripeClient.js
+                                                      |
+                                                      v
+                                                auditLogger.js
+
+retryCron.js → payoutService.retryPayout()

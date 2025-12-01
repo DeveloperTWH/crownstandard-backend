@@ -1,0 +1,25 @@
+payout/
+├── cron/
+│   ├── payoutCron.js        → Finds eligible bookings & triggers payout
+│   ├── retryCron.js         → Retries failed payouts
+│
+├── service/
+│   ├── payoutService.js         → Main payout creation & release logic
+│   ├── bookingService.js        → Validate booking, 48h logic, fetch
+│   ├── paymentService.js        → Payment, refunds, status
+│   ├── tipService.js            → Tips, tip refunds
+│   ├── disputeService.js        → Detect open/resolved disputes
+│
+├── utils/
+│   ├── auditLogger.js           → Logs all events to AuditLog
+│   ├── currencyHelper.js        → Formats/converts currency
+│   ├── dateUtils.js             → Time checks (48h, 24h, retries)
+│
+models/
+├── Booking.js
+├── PaymentTransaction.js
+├── TipTransaction.js
+├── Payout.js
+├── Dispute.js
+├── AuditLog.js
+

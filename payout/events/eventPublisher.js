@@ -1,52 +1,33 @@
+// payout/events/eventPublisher.js
 /**
- * /payout/events/eventPublisher.js
- * ---------------------------------------------------------------
- * Handles publishing domain events to AWS EventBridge.
- * Used across payout module for PAYOUT_* lifecycle events.
- * ---------------------------------------------------------------
+ * CrownStandard Event Publisher
+ * -----------------------------------------------------
+ * Lightweight local event bus (can be replaced with EventBridge/SQS later).
+ * Responsible for emitting standardized domain events.
  */
 
-const AWS = require("aws-sdk");
-const eventBridge = new AWS.EventBridge({ region: process.env.AWS_REGION });
+const { EventEmitter } = require("events");
 
-class EventPublisher {
+class EventPublisher extends EventEmitter {
   /**
-   * Publishes a custom event to EventBridge for observability & downstream triggers.
-   *
-   * @param {String} eventType - e.g., "PAYOUT_SCHEDULED", "PAYOUT_RELEASED"
-   * @param {Object} payload - event detail object
+   * Emit a standardized domain event.
+   * @param {String} eventName - e.g., "PAYOUT_SCHEDULED"
+   * @param {Object} payload
    */
-  static async publishEvent(eventType, payload = {}) {
-    try {
-      if (!eventType) throw new Error("Event type is required");
+  publish(eventName, payload = {}) {
+    console.log(`📢 Event emitted: ${eventName}`, JSON.stringify(payload));
+    this.emit(eventName, payload);
+  }
 
-      const event = {
-        Entries: [
-          {
-            Source: "crownstandard.payout",
-            DetailType: eventType,
-            Detail: JSON.stringify({
-              ...payload,
-              timestamp: new Date().toISOString(),
-            }),
-            EventBusName: process.env.EVENT_BUS_NAME || "default",
-          },
-        ],
-      };
-
-      const response = await eventBridge.putEvents(event).promise();
-
-      if (response.FailedEntryCount > 0) {
-        console.error("⚠️ EventBridge publish partially failed:", response);
-      } else {
-        console.log(`📡 Event published → ${eventType}`);
-      }
-    } catch (err) {
-      console.error("❌ Failed to publish EventBridge event:", err.message);
-    }
+  /**
+   * Register a one-time debug log for all events (for local dev).
+   */
+  enableDebugLogging() {
+    this.onAny?.((event, payload) =>
+      console.log(`[DEBUG EVENT] ${event}:`, payload)
+    );
   }
 }
 
-module.exports = {
-  publishEvent: EventPublisher.publishEvent.bind(EventPublisher),
-};
+const eventPublisher = new EventPublisher();
+module.exports = eventPublisher;

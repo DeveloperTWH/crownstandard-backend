@@ -38,7 +38,7 @@ exports.register = async (req, res) => {
                 oauthProvider: user.oauthProvider || null,
             },
         });
-    } catch (e) { res.status(500).json({ success: false, message: 'Registration failed' , error:e }); }
+    } catch (e) { res.status(500).json({ success: false, message: 'Registration failed', error: e }); }
 };
 
 exports.login = async (req, res) => {
@@ -66,6 +66,33 @@ exports.login = async (req, res) => {
         // 🎟️ Generate JWT (safe fields only)
         const token = signJWT({ id: user._id, role: user.role });
 
+        // 🍪 Set secure auth cookie
+        res.cookie("auth_token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: 'strict',
+            // sameSite: 'none',
+            // domain: '.crownstandard.ca',,
+            maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+        });
+
+        // (Optional) store user role
+        res.cookie("user_role", user.role, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: 'strict',
+            // sameSite: 'none',
+            // domain: '.crownstandard.ca',
+            maxAge: 1000 * 60 * 60 * 24 * 7,
+        });
+        res.cookie("user_id", user._id.toString(), {
+            httpOnly: false, // readable by frontend
+            sameSite: "strict",
+            // sameSite: 'none',
+            // domain: '.crownstandard.ca',
+            secure: process.env.NODE_ENV === "production"
+        });
+
         // 🧼 Return safe user info
         res.json({
             success: true,
@@ -92,7 +119,7 @@ exports.me = async (req, res) => {
             .select("-passwordHash -__v -resetTokens") // ✅ never return these
             .lean();
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
-        res.json({ success: true, user:user });
+        res.json({ success: true, user: user });
     } catch (e) {
         res.status(500).json({ success: false, message: "Could not fetch user" });
     }
@@ -122,7 +149,7 @@ exports.updateMe = async (req, res) => {
 
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        res.json({success: true, user:user });
+        res.json({ success: true, user: user });
     } catch (e) {
         res.status(500).json({ success: false, message: "Update failed" });
     }
@@ -145,7 +172,7 @@ exports.updateProviderOnboarding = async (req, res) => {
 
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        res.json({ success: true, user:user });
+        res.json({ success: true, user: user });
     } catch (e) {
         res.status(500).json({ success: false, message: "Onboarding update failed" });
     }
@@ -184,31 +211,31 @@ exports.forgotPassword = async (req, res) => {
 
 // Reset password
 exports.resetPassword = async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword)
-      return res.status(400).json({ success: false, message: "Token and new password are required" });
+    try {
+        const { token, newPassword } = req.body;
+        if (!token || !newPassword)
+            return res.status(400).json({ success: false, message: "Token and new password are required" });
 
-    const rec = await PasswordResetToken.findOne({ token });
-    if (!rec || rec.usedAt || rec.expiresAt < new Date())
-      return res.status(400).json({ success: false, message: "Invalid or expired token" });
+        const rec = await PasswordResetToken.findOne({ token });
+        if (!rec || rec.usedAt || rec.expiresAt < new Date())
+            return res.status(400).json({ success: false, message: "Invalid or expired token" });
 
-    const user = await User.findById(rec.userId);
-    if (!user) return res.status(400).json({ success: false, message: "Invalid token" });
+        const user = await User.findById(rec.userId);
+        if (!user) return res.status(400).json({ success: false, message: "Invalid token" });
 
-    if (newPassword.length < 8)
-      return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+        if (newPassword.length < 8)
+            return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
 
-    user.passwordHash = await hashPassword(newPassword);
-    await user.save();
+        user.passwordHash = await hashPassword(newPassword);
+        await user.save();
 
-    rec.usedAt = new Date();
-    await rec.save();
+        rec.usedAt = new Date();
+        await rec.save();
 
-    res.json({ success: true, ok: true });
-  } catch (e) {
-    res.status(500).json({ success: false, message: "Reset failed" });
-  }
+        res.json({ success: true, ok: true });
+    } catch (e) {
+        res.status(500).json({ success: false, message: "Reset failed" });
+    }
 };
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);

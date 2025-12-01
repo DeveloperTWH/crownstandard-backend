@@ -1,126 +1,139 @@
+// payout/workers/retryWorker.js
 /**
- * /payout/workers/retryWorker.js
- * ---------------------------------------------------------------
- * Handles automatic retry of failed payouts.
- * Now includes:
- *  - graceful shutdown
- *  - 30-minute auto loop option (for standalone run)
- *  - unified logging
- * ---------------------------------------------------------------
+ * CrownStandard Retry Worker
+ * -----------------------------------------------------
+ * Handles retrying failed payouts using exponential backoff strategy.
+ * Retries up to 3 times before permanently marking payout as failed.
  */
 
 const Payout = require("../../models/Payout");
-const PayoutService = require("../service/payoutService");
-const BookingService = require("../service/bookingService");
-const { logAudit } = require("../utils/auditLogger");
-const { updateRetryWorkerHealth } = require("../../routes/healthRoute");
-
-
-function log(tag, msg) {
-  console.log(`[${new Date().toISOString()}][${tag}] ${msg}`);
-}
+const PayoutWorker = require("./payoutWorker");
+const AuditLogService = require("../services/auditLogService");
 
 class RetryWorker {
-  /** Find failed payouts and re-process them */
-  static async processFailedPayouts() {
-    log("RETRY", "🔁 Scanning for failed payouts...");
+  /**
+   * Process all payouts eligible for retry.
+   * @param {Number} [limit=10]
+   */
+  static async processRetryQueue(limit = 10) {
+    console.log("heere ia ");
+    
+    const now = new Date();
 
     const failedPayouts = await Payout.find({
       status: "failed",
       attempts: { $lt: 3 },
     })
-      .sort({ updatedAt: 1 })
-      .limit(10);
+      .sort({ lastFailedAt: 1 })
+      .limit(limit)
+      .lean();
 
-    if (failedPayouts.length === 0) {
-      log("RETRY", "✅ No failed payouts to retry.");
-      updateRetryWorkerHealth("running");
+    if (!failedPayouts.length) {
+      console.log("ℹ️ No failed payouts found for retry.");
       return;
     }
+
+    console.log(`🔁 Found ${failedPayouts.length} failed payouts for retry.`);
 
     for (const payout of failedPayouts) {
-      await this.retryPayout(payout);
+      try {
+        if (!this.isRetryEligible(payout, now)) {
+          console.log(`⏳ Skipping payout ${payout._id} — backoff window not reached yet.`);
+          continue;
+        }
+
+        await this.retrySinglePayout(payout);
+      } catch (err) {
+        console.error(`❌ RetryWorker error for payout ${payout._id}:`, err.message);
+        await AuditLogService.logError(err, "RetryWorker.retrySinglePayout", {
+          payoutId: payout._id,
+        });
+      }
     }
+
+    console.log("✅ Retry batch processing complete.");
   }
 
-  /** Retry a single payout with exponential backoff */
-  static async retryPayout(payout) {
-    try {
-      const delayMs = Math.pow(2, payout.attempts) * 60 * 1000; // 1min→2min→4min
-      log(
-        "RETRY",
-        `⚙️ Retrying payout ${payout._id} (booking ${payout.bookingId}) [attempt ${
-          payout.attempts + 1
-        }] after ${delayMs / 1000}s`
-      );
+  /**
+   * Determine if a payout is ready for retry based on exponential backoff.
+   * 1st retry: after 1h
+   * 2nd retry: after 6h
+   * 3rd retry: after 24h
+   * @param {Object} payout
+   * @param {Date} now
+   * @returns {Boolean}
+   */
+  static isRetryEligible(payout, now) {
+    if (!payout.lastFailedAt) return true;
+    const elapsed = now - new Date(payout.lastFailedAt);
 
-      await new Promise((r) => setTimeout(r, delayMs));
+    if (payout.attempts === 0) return elapsed >= 0; // immediate
+    if (payout.attempts === 1) return elapsed >= 60 * 60 * 1000; // 1h
+    if (payout.attempts === 2) return elapsed >= 6 * 60 * 60 * 1000; // 6h
+    if (payout.attempts >= 3) return false;
 
-      const booking = await BookingService.getBookingIfEligible(payout.bookingId);
-      if (!booking) {
-        log("RETRY", `⚠️ Booking ${payout.bookingId} no longer eligible, skipping retry.`);
-        return;
+    return true;
+  }
+
+  /**
+   * Retry a single failed payout.
+   * @param {Object} payout
+   */
+  static async retrySinglePayout(payout) {
+    console.log(`🔁 Retrying payout ${payout._id} (attempt ${payout.attempts + 1})`);
+
+    // Update attempt counter and mark as processing
+    await Payout.updateOne(
+      { _id: payout._id },
+      {
+        $set: { status: "processing", lastFailedAt: new Date() },
+        $inc: { attempts: 1 },
       }
+    );
 
-      payout.attempts += 1;
-      payout.status = "processing";
-      await payout.save();
+    await AuditLogService.logSystemAction(
+      "PAYOUT_RETRY_SCHEDULED",
+      "payout",
+      payout._id,
+      `Retry attempt ${payout.attempts + 1} for failed payout`,
+      { attempts: payout.attempts + 1 }
+    );
 
-      const result = await PayoutService.createAndReleasePayout(payout.bookingId);
-
-      log(
-        "RETRY",
-        result.status === "success"
-          ? `✅ Retry succeeded for payout ${payout._id}`
-          : `❌ Retry failed for payout ${payout._id}: ${result.error}`
-      );
-
-      await logAudit({
-        actionType: "PAYOUT_RETRIED",
-        targetType: "booking",
-        targetId: payout.bookingId,
-        description: `Retry #${payout.attempts} → ${result.status}`,
-        meta: { payoutId: payout._id, error: result.error || null },
+    try {
+      await PayoutWorker.processSinglePayout(payout);
+    } catch (err) {
+      console.error(`❌ Retry failed for payout ${payout._id}:`, err.message);
+      await AuditLogService.logError(err, "RetryWorker.retrySinglePayout", {
+        payoutId: payout._id,
       });
 
-      payout.status = result.status === "success" ? "transferred" : "failed";
-      payout.failureReason = result.error || null;
-      await payout.save();
-    } catch (err) {
-      log("RETRY", `❌ RetryWorker error: ${err.message}`);
+      // Mark again as failed
+      await Payout.updateOne(
+        { _id: payout._id },
+        {
+          $set: {
+            status: "failed",
+            failureReason: err.message,
+            lastFailedAt: new Date(),
+          },
+        }
+      );
     }
   }
 
-  /** Manual trigger for single payout retry */
-  static async retrySinglePayout(payoutId) {
-    const payout = await Payout.findById(payoutId);
-    if (!payout) {
-      log("RETRY", `❌ Payout ${payoutId} not found`);
-      return;
+  /**
+   * Clean up permanently failed payouts (after 3 failed attempts)
+   */
+  static async markPermanentFailures() {
+    const expired = await Payout.updateMany(
+      { status: "failed", attempts: { $gte: 3 } },
+      { $set: { status: "cancelled" } }
+    );
+
+    if (expired.modifiedCount > 0) {
+      console.log(`⚠️ ${expired.modifiedCount} payouts marked as permanently failed.`);
     }
-    await this.retryPayout(payout);
   }
 }
-
-/** Optional: auto-loop every 30 minutes if run directly */
-if (require.main === module) {
-  (async () => {
-    log("RETRY", "🚀 RetryWorker loop started (every 30 minutes)...");
-    while (true) {
-      await RetryWorker.processFailedPayouts();
-      await new Promise((r) => setTimeout(r, 30 * 60 * 1000));
-    }
-  })();
-}
-
-/** Graceful shutdown */
-process.on("SIGINT", () => {
-  log("RETRY", "🛑 Graceful shutdown (SIGINT)");
-  process.exit(0);
-});
-process.on("SIGTERM", () => {
-  log("RETRY", "🛑 Graceful shutdown (SIGTERM)");
-  process.exit(0);
-});
 
 module.exports = RetryWorker;

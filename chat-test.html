@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Realtime Chat Test</title>
+</head>
+<body>
+
+<h2>🔴 Crownstandard WebSocket Test</h2>
+
+<input id="threadId" value="692944cbbf91be9b3894e3d5" style="width:300px;"><br><br>
+
+<input id="msg" placeholder="Type message..." style="width:300px;">
+<button onclick="send()">Send</button>
+
+<div id="logs" style="margin-top:20px; font-family:monospace;"></div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io("http://localhost:5000", { transports:["websocket"] });
+
+socket.on("connect", () => log("🟢 Connected to socket"));
+
+function joinThread() {
+  const thread = document.getElementById("threadId").value;
+  socket.emit("join_thread", thread);
+  log("📌 Joined thread " + thread);
+}
+joinThread();
+
+socket.on("new_message", (msg) => {
+  log("📩 New Msg → " + msg.message + " (from " + msg.senderId + ")");
+});
+
+function send() {
+  const thread = document.getElementById("threadId").value;
+  const text = document.getElementById("msg").value;
+  fetch(`http://localhost:5000/api/chat/messages/${thread}`, {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OGVjZDE4ODU1NjhkODI5NWRkMTRhN2EiLCJyb2xlIjoiY3VzdG9tZXIiLCJpYXQiOjE3NjQzMTMxOTAsImV4cCI6MTc2NDkxNzk5MH0.W--dV9d_5_ObSFwaEeloOi7dwRcMop_nh8E_mp93ppg"
+    },
+    body:JSON.stringify({ message:text })
+  });
+}
+
+function log(t){
+  document.getElementById("logs").innerHTML += "<br>" + t;
+}
+</script>
+
+</body>
+</html>

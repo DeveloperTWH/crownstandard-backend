@@ -1,119 +1,156 @@
+// payout/workers/payoutWorker.js
 /**
- * /payout/workers/payoutWorker.js
- * ---------------------------------------------------------------
- * SQS Consumer: Handles payout job execution.
- * Now includes:
- *  - graceful shutdown
- *  - duplicate-loop prevention
- *  - unified logging timestamps
- * ---------------------------------------------------------------
+ * CrownStandard Payout Worker
+ * -----------------------------------------------------
+ * Executes Stripe transfers for all scheduled payouts.
+ * Ensures idempotency, retry safety, and audit traceability.
  */
 
-const AWS = require("aws-sdk");
-const PayoutService = require("../service/payoutService");
-const BookingService = require("../service/bookingService");
-const { logAudit } = require("../utils/auditLogger");
-const { updatePayoutWorkerHealth } = require("../../routes/healthRoute");
+const Payout = require("../../models/Payout");
+const Booking = require("../../models/Booking");
+const PaymentService = require("../services/paymentService");
+const TipService = require("../services/tipService");
+const StripeUtils = require("../utils/stripeUtils");
+const AuditLogService = require("../services/auditLogService");
+const PayoutService = require("../services/payoutService");
+const { EventEmitter } = require("events");
 
-const sqs = new AWS.SQS({ region: process.env.AWS_REGION });
-const QUEUE_URL = process.env.PAYOUT_QUEUE_URL;
-
-function log(tag, msg) {
-  console.log(`[${new Date().toISOString()}][${tag}] ${msg}`);
-}
+const eventBus = new EventEmitter();
 
 class PayoutWorker {
   /**
-   * Process one message from SQS
+   * Process all eligible payouts (status = 'scheduled' or 'processing')
+   * @param {Number} [limit=20]
    */
-  static async processMessage(message) {
-    try {
-      const body = JSON.parse(message.Body);
-      const bookingId = body.bookingId;
+  static async processScheduledPayouts(limit = 20) {
+    const eligiblePayouts = await Payout.find({
+      status: { $in: ["scheduled", "processing"] },
+    })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .lean();
 
-      log("PAYOUT", `📬 Received payout job for booking ${bookingId}`);
+    if (!eligiblePayouts.length) {
+      console.log("ℹ️ No scheduled payouts found.");
+      return;
+    }
 
-      // 1️⃣ Re-validate booking
-      const booking = await BookingService.getBookingIfEligible(bookingId);
-      if (!booking) {
-        log("PAYOUT", `⚠️ Booking ${bookingId} not eligible for payout, skipping.`);
-        await logAudit({
-          actionType: "PAYOUT_HELD",
-          targetType: "booking",
-          targetId: bookingId,
-          description: "Booking not eligible for payout (likely dispute or timing).",
+    console.log(`🚀 Processing ${eligiblePayouts.length} scheduled payouts...`);
+
+    for (const payout of eligiblePayouts) {
+      try {
+        await this.processSinglePayout(payout);
+      } catch (err) {
+        console.error(`❌ Error processing payout ${payout._id}:`, err.message);
+        await AuditLogService.logError(err, "PayoutWorker.processSinglePayout", {
+          payoutId: payout._id,
         });
-        return;
+        // Ensure failure state is visible for retryWorker
+        await PayoutService.markAsFailed(payout._id, err.message);
+      }
+    }
+
+    console.log("✅ Payout batch processing complete.");
+  }
+
+  /**
+   * Process a single payout safely
+   * @param {Object} payout
+   */
+  static async processSinglePayout(payout) {
+    console.log(`💸 Processing payout: ${payout._id}`);
+
+    if (!payout.amount || payout.amount <= 0) {
+      console.warn(`⚠️ Skipping payout ${payout._id} — zero amount.`);
+      await PayoutService.markAsFailed(payout._id, "Zero payout amount");
+      return;
+    }
+
+    const providerId = payout.providerId;
+    const destination = await this.getProviderStripeAccount(providerId);
+    if (!destination) {
+      throw new Error(`Provider ${providerId} missing Stripe account ID`);
+    }
+
+    // Verify Stripe account eligibility
+    const verified = await StripeUtils.verifyConnectedAccount(destination);
+    if (!verified) {
+      await PayoutService.markAsFailed(payout._id, "Provider Stripe account not verified");
+      return;
+    }
+
+    // Mark as processing before attempting transfer
+    await Payout.updateOne({ _id: payout._id }, { status: "processing" });
+
+    try {
+      // Execute Stripe transfer (Stripe expects amount in cents)
+      const transfer = await StripeUtils.createTransfer({
+        amount: Math.round(payout.amount * 100), // ✅ cents
+        currency: payout.currency,
+        destination,
+        idempotencyKey: payout.idempotencyKey,
+        payoutId: payout._id,
+        providerId: payout.providerId,
+      });
+
+      // Mark payout as transferred
+      await PayoutService.markAsTransferred(payout._id, transfer.id);
+
+      // Update payment & tip transactions
+      if (payout.paymentTransactionId) {
+        await PaymentService.markTransferred(payout.paymentTransactionId, transfer.id);
       }
 
-      // 2️⃣ Execute payout
-      const result = await PayoutService.createAndReleasePayout(bookingId);
-
-      // 3️⃣ Log result
-      if (result.status === "success") {
-        log("PAYOUT", `✅ Payout completed for booking ${bookingId}`);
-      } else if (result.status === "held") {
-        log("PAYOUT", `⏸️ Payout held for booking ${bookingId}`);
-      } else {
-        log("PAYOUT", `❌ Payout failed for booking ${bookingId}: ${result.error}`);
+      if (payout.tipTransactionId) {
+        await TipService.markAsReleased(payout.tipTransactionId, transfer.id);
       }
 
-      // 4️⃣ Delete message only after processing
-      await sqs
-        .deleteMessage({
-          QueueUrl: QUEUE_URL,
-          ReceiptHandle: message.ReceiptHandle,
-        })
-        .promise();
+      // Update booking payout info
+      await Booking.updateOne(
+        { _id: payout.bookingId },
+        {
+          $set: {
+            "payout.status": "released",
+            "payout.transferId": transfer.id,
+            "payout.releasedAt": new Date(),
+          },
+        }
+      );
 
-      log("PAYOUT", `🗑️ Message deleted from queue for booking ${bookingId}`);
+      // Log + Emit
+      await AuditLogService.logSystemAction(
+        "PAYOUT_RELEASED",
+        "payout",
+        payout._id,
+        `Payout ${payout._id} released successfully.`,
+        { stripeTransferId: transfer.id }
+      );
+
+      eventBus.emit("PAYOUT_RELEASED", {
+        payoutId: payout._id,
+        stripeTransferId: transfer.id,
+        providerId: payout.providerId,
+      });
+
+      console.log(`✅ Payout ${payout._id} released successfully.`);
     } catch (err) {
-      log("PAYOUT", `❌ Worker processing error: ${err.message}`);
-      // Leave message in queue for SQS visibility-timeout retry
+      console.error(`❌ Transfer failed for payout ${payout._id}:`, err.message);
+      await PayoutService.markAsFailed(payout._id, err.message);
+      throw err;
     }
   }
 
   /**
-   * Get and process messages from SQS (called by cron)
+   * Retrieve provider’s Stripe account ID
+   * Replace this stub with actual DB lookup in production.
    */
-  static async processPendingPayouts() {
-    log("PAYOUT", `🚀 Started processing pending payouts...`);
-
-    try {
-      // Receive messages from SQS (max 5 per call)
-      const response = await sqs
-        .receiveMessage({
-          QueueUrl: QUEUE_URL,
-          MaxNumberOfMessages: 5,
-          WaitTimeSeconds: 10,
-        })
-        .promise();
-
-      const messages = response.Messages || [];
-      if (messages.length === 0) {
-        log("PAYOUT", `ℹ️ No pending messages in queue.`);
-        return;
-      }
-
-      for (const msg of messages) {
-        await this.processMessage(msg);
-      }
-
-      updatePayoutWorkerHealth("running");
-      log("PAYOUT", `✅ Processed ${messages.length} payouts.`);
-    } catch (err) {
-      log("PAYOUT", `❌ Error fetching/polling from queue: ${err.message}`);
-    }
+  static async getProviderStripeAccount(providerId) {
+    console.log(`Fetching Stripe account ID for provider: ${providerId}`);
+    // Example for production:
+    // const provider = await User.findById(providerId).select("stripeAccountId");
+    // return provider?.stripeAccountId || null;
+    return process.env.TEST_STRIPE_ACCOUNT_ID || null;
   }
 }
-
-/** Graceful shutdown for EB restarts */
-function stopWorker() {
-  log("PAYOUT", "🛑 Stopping payout worker gracefully...");
-  process.exit(0);
-}
-
-process.on("SIGINT", stopWorker);
-process.on("SIGTERM", stopWorker);
 
 module.exports = PayoutWorker;

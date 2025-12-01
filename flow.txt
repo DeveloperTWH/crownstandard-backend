@@ -1,0 +1,15 @@
+| Step | File                                     | Purpose                        | Why first                           |
+| ---- | ---------------------------------------- | ------------------------------ | ----------------------------------- |
+| 1️⃣   | **auditLogService.js**                   | Central logging utility        | Every service depends on it         |
+| 2️⃣   | **amountUtils.js**                       | Core calculation logic         | Used by payoutService               |
+| 3️⃣   | **currencyUtils.js**                     | Currency conversions           | Needed by amountUtils               |
+| 4️⃣   | **payoutService.js**                     | Core orchestration             | Backbone of payouts                 |
+| 5️⃣   | **paymentService.js**                    | Payment data validation        | Payout depends on it                |
+| 6️⃣   | **tipService.js**                        | Tip fetching logic             | Used in combined payout             |
+| 7️⃣   | **disputeService.js**                    | Checks on-hold or refund logic | Controls payout eligibility         |
+| 8️⃣   | **stripeUtils.js**                       | Idempotent transfer handling   | Critical for production safety      |
+| 9️⃣   | **payoutWorker.js**                      | Executes real transfer         | Uses payoutService + stripeUtils    |
+| 🔟   | **retryWorker.js**                       | Retry failed payouts           | Recovery mechanism                  |
+| 1️⃣1️⃣ | **payoutCron.js**                        | Triggers scheduled payouts     | Kicks off the flow hourly           |
+| 1️⃣2️⃣ | **payoutController.js**                  | Admin endpoints                | Exposes manual triggers             |
+| 1️⃣3️⃣ | **eventPublisher.js / eventListener.js** | Local event system             | Completes domain event architecture |
