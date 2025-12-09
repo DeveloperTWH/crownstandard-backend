@@ -10,7 +10,7 @@ exports.register = async (req, res) => {
     try {
         const { name, email, phone, password, role = 'customer' } = req.body;
         if (!name || !email || !password) return res.status(400).json({ success: false, message: 'Missing fields' });
-        if (!["customer", "provider"].includes(role)) {
+        if (!["customer", "provider","admin"].includes(role)) {
             return res.status(400).json({ success: false, message: "Invalid role" });
         }
         const normalizedEmail = email.toLowerCase();
