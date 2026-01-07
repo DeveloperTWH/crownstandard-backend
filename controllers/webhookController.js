@@ -10,7 +10,7 @@ exports.handleStripeWebhook = async (req, res) => {
     // 1️⃣ Verify signature to ensure request is from Stripe
     const sig = req.headers["stripe-signature"];
     event = stripe.webhooks.constructEvent(
-      req.rawBody, // Make sure to use raw body in Express middleware
+      req.body, // ✅ Use this instead  // Make sure to use raw body in Express middleware
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );

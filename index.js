@@ -50,13 +50,15 @@ app.use((req, res, next) => {
 app.use("/auth", require("./routes/auth.routes"));
 app.use("/users", require("./routes/user.routes"));
 app.use("/categories", require("./routes/category.routes"));
-app.use("/service", require("./routes/service.routes"));
+app.use("/api/service", require("./routes/service.routes"));
 app.use("/providers", require("./routes/provider.routes"));
-app.use("/services", require("./routes/service.public.routes"));      // public
-app.use("/services", require("./routes/service.routes"));             // provider (create/update/delete/my)
+app.use("/api/services", require("./routes/service.public.routes"));      // public
+app.use("/api/service", require("./routes/service.routes"));             // provider (create/update/delete/my)
 app.use("/api", require("./routes/bookingRoutes"));
 app.use("/api", require("./routes/paymentRoutes"));
 app.use("/api/chat", require("./routes/chat.routes"));
+app.use("/admin", require("./routes/admin.routes"));
+
 
 // admin payout routes
 // app.use("/api/admin/payouts", require("./payout/controllers/payoutController"));
