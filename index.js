@@ -11,9 +11,23 @@ const RetryWorker = require("./payout/workers/retryWorker");
 
 const app = express();
 
+const allowedOrigins = [
+  "https://app.crownstandard.ca",
+  "http://localhost:3000",
+  "https://crownstandard-frontend.onrender.com"
+];
 // 🔌 Middlewares
 app.use(cors({
-  origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca","https://crownstandard-frontend.onrender.com"],
+  origin: function (origin, callback) {
+    // allow Postman / server-to-server
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
   credentials: true
 }));
 
