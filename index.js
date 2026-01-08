@@ -13,7 +13,7 @@ const app = express();
 
 // 🔌 Middlewares
 app.use(cors({
-  origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca"],
+  origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca","https://crownstandard-frontend.onrender.com"],
   credentials: true
 }));
 
