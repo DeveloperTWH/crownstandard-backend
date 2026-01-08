@@ -69,21 +69,20 @@ exports.login = async (req, res) => {
         const token = signJWT({ id: user._id, role: user.role });
 
         // 🍪 Set secure auth cookie
-    res.cookie("auth_token", token, {
+res.cookie("auth_token", token, {
   httpOnly: true,
-  secure: isProd,
-  sameSite: isProd ? "none" : "lax",
+  sameSite: "none",   // 👈 MUST be none for cross-domain
+  secure: true,       // 👈 MUST be true on HTTPS
   maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: "/"
 });
 
 res.cookie("user_role", user.role, {
   httpOnly: false,
-  secure: isProd,
-  sameSite: isProd ? "none" : "lax",
+  sameSite: "none",
+  secure: true,
   maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: "/"
 });
+
         res.cookie("user_id", user._id.toString(), {
             httpOnly: false, // readable by frontend
             sameSite: "strict",
