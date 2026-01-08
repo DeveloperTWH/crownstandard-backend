@@ -6,6 +6,8 @@ const { hashPassword, comparePassword } = require('../utils/passwords');
 const { signJWT } = require('../utils/jwt');
 const { sendEmail } = require('../utils/sendEmail');
 
+const isProd = process.env.NODE_ENV === "production";
+
 exports.register = async (req, res) => {
     try {
         const { name, email, phone, password, role = 'customer' } = req.body;
@@ -67,24 +69,21 @@ exports.login = async (req, res) => {
         const token = signJWT({ id: user._id, role: user.role });
 
         // 🍪 Set secure auth cookie
-        res.cookie("auth_token", token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: 'strict',
-            // sameSite: 'none',
-            // domain: '.crownstandard.ca',,
-            maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-        });
+    res.cookie("auth_token", token, {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/"
+});
 
-        // (Optional) store user role
-        res.cookie("user_role", user.role, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: 'strict',
-            // sameSite: 'none',
-            // domain: '.crownstandard.ca',
-            maxAge: 1000 * 60 * 60 * 24 * 7,
-        });
+res.cookie("user_role", user.role, {
+  httpOnly: false,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/"
+});
         res.cookie("user_id", user._id.toString(), {
             httpOnly: false, // readable by frontend
             sameSite: "strict",

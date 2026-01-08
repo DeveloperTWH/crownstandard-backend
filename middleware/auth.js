@@ -1,6 +1,8 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
+
+
 module.exports = async function auth(req, res, next) {
   try {
     // Get token stored in cookie by your login API
