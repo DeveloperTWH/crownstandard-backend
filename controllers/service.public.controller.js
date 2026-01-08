@@ -226,8 +226,8 @@ exports.getServiceDetail = async (req, res) => {
                 $match: {
                     "provider.role": "provider",
                     "provider.status": "active",
-                    "provider.providerProfile.approvalStatus": "approved",
-                    "provider.providerProfile.kyc.verified": true,
+                    // "provider.providerProfile.approvalStatus": "approved",
+                    // "provider.providerProfile.kyc.verified": true,
                 },
             },
             {
