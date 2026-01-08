@@ -12,15 +12,11 @@ const RetryWorker = require("./payout/workers/retryWorker");
 const app = express();
 
 // 🔌 Middlewares
-// app.use(cors({
-//   origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca","https://crownstandard-frontend.onrender.com"],
-//   credentials: true
-// }));
-
 app.use(cors({
-  origin: true,
+  origin: ["https://crownstandard.netlify.app", "http://localhost:3000", "https://app.crownstandard.ca","https://crownstandard-frontend.onrender.com"],
   credentials: true
 }));
+
 
 
 app.use("/api", require("./routes/webhookRoutes"));
