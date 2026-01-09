@@ -90,7 +90,7 @@ app.use("/admin", require("./routes/admin.routes"));
 
 
 app.get("/", (req, res) => {
-  res.json({ message: "Crownstandard API is running 🚀" });
+  res.json({ message: "Crownstandard API is running and ci/cd integrated successfully🚀" });
 });
 
 
