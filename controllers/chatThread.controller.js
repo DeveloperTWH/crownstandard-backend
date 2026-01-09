@@ -33,62 +33,89 @@ exports.getOrCreateThread = async (req, res) => {
 };
 
 
-exports.getMyThreads = async (req, res) => {
-  const userId = req.user._id.toString();
-
-  const threads = await ChatThread.find({ participants: userId })
-    .sort({ lastActivityAt: -1 })
-    .populate("participants", "name profilePhoto role") 
-    .populate("bookingId")
-    .lean();
-
-  // --- Use the imported connectedUsers store ---
-  const threadsWithStatus = threads.map(thread => {
-    
-    const otherParticipant = thread.participants.find(
-        p => p._id.toString() !== userId
-    );
-
-    let isOnline = false;
-
-    console.log("otherpartcipents",otherParticipant)
-
-    if (otherParticipant) {
-        const otherParticipantId = otherParticipant._id.toString();
-        
-        // Check the shared store: is the other user's ID a key?
-        // And does the Set associated with the key have at least one entry?
-        if (connectedUsers[otherParticipantId] && connectedUsers[otherParticipantId].size > 0) {
-            isOnline = true;
-        }
-    }
-
-    return {
-        ...thread,
-        // Attach the online status flag
-        online: isOnline, 
-        // Ensure 'name' is the other participant's name for the client UI
-        name: otherParticipant ? otherParticipant.name : 'Unknown User', 
-    };
-  });
-
-  res.json({ threads: threadsWithStatus });
-};
-
 // exports.getMyThreads = async (req, res) => {
-//   const userId = req.user._id;
+//   const userId = req.user._id.toString();
 
-//   console.log("userid",userId)
+//   const threads = await ChatThread.find({ participants: userId })
+//     .sort({ lastActivityAt: -1 })
+//     .populate("participants", "name profilePhoto role") 
+//     .populate("bookingId")
+//     .lean();
 
-//   const threads = await ChatThread.find({ participants: userId })
-//     .sort({ lastActivityAt: -1 })
-//     .populate("participants", "name profilePhoto role")  // 🔥 sending user details
-//     .populate("bookingId");
+//   // --- Use the imported connectedUsers store ---
+//   const threadsWithStatus = threads.map(thread => {
+    
+//     const otherParticipant = thread.participants.find(
+//         p => p._id.toString() !== userId
+//     );
 
-//   res.json({ threads });
+//     let isOnline = false;
+
+//     console.log("otherpartcipents",otherParticipant)
+
+//     if (otherParticipant) {
+//         const otherParticipantId = otherParticipant._id.toString();
+        
+//         // Check the shared store: is the other user's ID a key?
+//         // And does the Set associated with the key have at least one entry?
+//         if (connectedUsers[otherParticipantId] && connectedUsers[otherParticipantId].size > 0) {
+//             isOnline = true;
+//         }
+//     }
+
+//     return {
+//         ...thread,
+//         // Attach the online status flag
+//         online: isOnline, 
+//         // Ensure 'name' is the other participant's name for the client UI
+//         name: otherParticipant ? otherParticipant.name : 'Unknown User', 
+//     };
+//   });
+
+//   res.json({ threads: threadsWithStatus });
 // };
 
 
+
+exports.getMyThreads = async (req, res) => {
+  const userId = req.user._id.toString();
+
+  const threads = await ChatThread.find({ participants: userId })
+    .sort({ lastActivityAt: -1 })
+    .populate("participants", "name profilePhoto role") 
+    .populate("bookingId")
+    .lean();
+
+  const threadsWithStatus = threads.map(thread => {
+    // Find the OTHER participant (not the current user)
+    const otherParticipant = thread.participants.find(
+      p => p._id.toString() !== userId
+    );
+
+    let isOnline = false;
+    if (otherParticipant) {
+      const otherParticipantId = otherParticipant._id.toString();
+      if (connectedUsers[otherParticipantId] && connectedUsers[otherParticipantId].size > 0) {
+        isOnline = true;
+      }
+    }
+
+    return {
+      ...thread,
+      online: isOnline,
+      // Show the OTHER participant's name and details
+      name: otherParticipant ? otherParticipant.name : 'Unknown User',
+      otherParticipant: otherParticipant ? {
+        _id: otherParticipant._id,
+        name: otherParticipant.name,
+        profilePhoto: otherParticipant.profilePhoto,
+        role: otherParticipant.role
+      } : null
+    };
+  });
+
+  res.json({ threads: threadsWithStatus });
+};
 
 
 

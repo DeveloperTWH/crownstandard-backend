@@ -8,6 +8,8 @@ const geocodeAddress = require("../utils/geocode");
 const Invoice = require("../models/Invoice");
 const PaymentTransaction = require("../models/PaymentTransaction");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+// After booking is created successfully
+const ChatThread = require("../models/ChatThread");
 
 
  exports.createBooking = async (req, res) => {
@@ -170,6 +172,12 @@ const booking = await Booking.create({
   specialInstructions,
 
   autoExpireAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+});
+
+// Auto-create chat thread
+await ChatThread.create({
+  bookingId: booking._id,
+  participants: [customerId, provider._id]
 });
 
 
