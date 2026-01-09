@@ -10,21 +10,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Create deployment zip
       - name: Zip application
         run: |
           zip -r backend.zip . \
@@ -32,7 +28,6 @@ jobs:
             -x ".git/*" \
             -x ".env"
 
-      # 5️⃣ Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -40,27 +35,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ca-central-1
 
-      # 6️⃣ Define version label (UNIQUE)
-      - name: Set version label
-        run: echo "VERSION_LABEL=backend-${{ github.run_id }}" >> $GITHUB_ENV
-
-      # 7️⃣ Upload zip to S3
       - name: Upload to S3
         run: |
-          aws s3 cp backend.zip \
-            s3://${{ secrets.S3_BUCKET }}/$VERSION_LABEL.zip
+          aws s3 cp backend.zip s3://${{ secrets.S3_BUCKET }}/backend-${{ github.sha }}-${{ github.run_number }}.zip
 
-      # 8️⃣ Create Elastic Beanstalk version
-      - name: Create EB application version
+      - name: Create Elastic Beanstalk Application Version
         run: |
           aws elasticbeanstalk create-application-version \
             --application-name "${{ secrets.EB_APP_NAME }}" \
-            --version-label "$VERSION_LABEL" \
-            --source-bundle S3Bucket=${{ secrets.S3_BUCKET }},S3Key=$VERSION_LABEL.zip
+            --version-label "backend-${{ github.sha }}-${{ github.run_number }}" \
+            --source-bundle S3Bucket=${{ secrets.S3_BUCKET }},S3Key=backend-${{ github.sha }}-${{ github.run_number }}.zip
 
-      # 9️⃣ Deploy to environment
       - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name "${{ secrets.EB_ENV_NAME }}" \
-            --version-label "$VERSION_LABEL"
+            --version-label "backend-${{ github.sha }}-${{ github.run_number }}"
